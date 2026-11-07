@@ -15,13 +15,13 @@
         android:strokeColor="#93C5FD"
         android:strokeWidth="5"
         android:strokeLineCap="round"
-        android:pathData="M78.5,36 A28,28 0 0,1 82,54" />
+        android:pathData="M76.936,37.94 A28,28 0 0,1 82,54" />
     <path
         android:fillColor="#00000000"
         android:strokeColor="#C4B5FD"
         android:strokeWidth="5"
         android:strokeLineCap="round"
-        android:pathData="M30,38 A28,28 0 0,1 50,26.3" />
+        android:pathData="M31.064,37.94 A28,28 0 0,1 49.138,26.425" />
     <path
         android:fillColor="#00000000"
         android:strokeColor="#FE8B00"

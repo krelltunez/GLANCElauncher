@@ -13,9 +13,11 @@ link to install it. Changes you make to demo data are not saved.
 Native Kotlin and Jetpack Compose. Made for tablets in landscape and portrait, and for phones in
 portrait.
 
-## Screenshots
+[<img src="docs/badges/google-play.png" alt="Get it on Google Play" height="60">](https://play.google.com/store/apps/details?id=app.glance.launcher)
 
-<!-- Screenshots to be added: the files below do not exist yet. -->
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+## Screenshots
 
 | Home, light | Home, dark |
 |---|---|
@@ -71,7 +73,8 @@ portrait.
 
 ## Install
 
-- **Google Play:** [GLANCElauncher on Google Play](https://play.google.com/store/apps/details?id=app.glance.launcher).
+[<img src="docs/badges/google-play.png" alt="Get it on Google Play" height="50">](https://play.google.com/store/apps/details?id=app.glance.launcher)
+
 - **APK:** the signed APK is attached to the
   [dayGLANCE releases](https://github.com/krelltunez/dayGLANCE/releases) and the
   [lastGLANCE releases](https://github.com/krelltunez/lastGLANCE/releases) on GitHub. Download it,
@@ -141,6 +144,13 @@ Privacy policy: https://glance-apps.com/glancelauncher/privacy
 - [docs/spec.md](docs/spec.md): the launcher as built, and how it reads and writes the apps' data.
 - [docs/decisions.md](docs/decisions.md): the numbered decision log behind it.
 - [docs/building.md](docs/building.md): building, installing and testing from source.
+
+## Support
+
+If GLANCElauncher has been useful to you, consider supporting its development:
+
+[![GitHub Sponsors](https://img.shields.io/badge/GitHub_Sponsors-EA4AAA?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/krelltunez)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?logo=kofi&logoColor=white)](https://ko-fi.com/krelltunez)
 
 ## Licence
 

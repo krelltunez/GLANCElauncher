@@ -268,6 +268,7 @@ private fun MonthSection(controller: LauncherController, tasks: List<Task>, rout
     val gridStart = month.minusDays(lead.toLong())
     val rows = ((lead + month.lengthOfMonth()) + 6) / 7
     val byDate = remember(tasks) { tasks.filter { it.date != null }.groupBy { it.date!! } }
+    val deadlinesByDate = remember(tasks, today) { SchedAgenda.deadlinesByDate(tasks, today) }
 
     GlanceCard(Modifier.fillMaxWidth(), padding = androidx.compose.foundation.layout.PaddingValues(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -307,6 +308,7 @@ private fun MonthSection(controller: LauncherController, tasks: List<Task>, rout
                         onClick = { controller.planningSelectedDay = date; controller.dialDate = date },
                         onLongClick = { GlanceIntents.openDay(context, date) },
                         aspect = cellAspect,
+                        deadlines = deadlinesByDate[date].orEmpty(),
                     )
                 }
             }

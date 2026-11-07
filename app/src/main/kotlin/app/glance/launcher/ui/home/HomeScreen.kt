@@ -864,6 +864,7 @@ private fun WeekStrip(controller: LauncherController, tasks: List<Task>, routine
     val locale = java.util.Locale.getDefault()
     val start = today
     val byDate = remember(tasks) { tasks.filter { it.date != null }.groupBy { it.date!! } }
+    val deadlinesByDate = remember(tasks, today) { app.glance.launcher.ui.planning.SchedAgenda.deadlinesByDate(tasks, today) }
     Row(modifier.fillMaxWidth()) {
         for (i in 0 until 7) {
             val date = start.plusDays(i.toLong())
@@ -884,6 +885,7 @@ private fun WeekStrip(controller: LauncherController, tasks: List<Task>, routine
                     onClick = { controller.dialDate = date },
                     onLongClick = { GlanceIntents.openDay(context, date) },
                     aspect = null,
+                    deadlines = deadlinesByDate[date].orEmpty(),
                 )
             }
         }

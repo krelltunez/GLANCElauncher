@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Optional: lets the dock's recents count apps used elsewhere. Granted by the user from the
+         line under the recents switch in Settings; the dock works without it (docs/decisions.md, decision 42). -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <!-- Keeps the device wallpaper a solid dayGLANCE background colour (Settings → Solid wallpaper). -->
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
+    <!-- Pull down on Home to open the notification shade (system/SystemShade.kt); normal level, no prompt. -->
+    <uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
+    <!-- The drawer's Uninstall (ACTION_DELETE): from Android 9 the system uninstaller closes
+         without a word for a caller lacking this. Normal level, no prompt. -->
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <!-- Optional: phone contacts in search (Settings → Contacts in search). Asked for only when the
+         user turns that on; search works without it. -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Voice search: the mic in the search bar, speech recognised on the device. Asked for on
+         the first tap; without it the mic's long press still opens dayGLANCE's voice capture. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- The dial's clock opens the clock app (AlarmClock.ACTION_SHOW_ALARMS, which its handler
+         guards with this). Normal level, no prompt. -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <!-- Launching the apps the user pins needs their activities to be visible. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" tools:ignore="QueryAllPackagesPermission" />
+
+    <!-- Real data (docs/spec.md, "Real data"): each app's launcher snapshot provider and write receiver sit
+         behind the app's own knownSigner permission over this launcher's certificates. -->
+    <uses-permission android:name="com.dayglance.permission.LAUNCHER" />
+    <uses-permission android:name="com.lastglance.permission.LAUNCHER" />
+
+    <queries>
+        <package android:name="com.dayglance.app" />
+        <package android:name="com.lastglance.app" />
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <!-- SpeechRecognizer finds the phone's recognition service through this. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
+
+    <application
+        android:name=".LauncherApp"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.GLANCElauncher">
+
+        <activity
+            android:name=".LauncherActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:clearTaskOnLaunch="true"
+            android:stateNotNeeded="true"
+            android:excludeFromRecents="true"
+            android:resizeableActivity="true"
+            android:screenOrientation="unspecified"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|locale|layoutDirection"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.GLANCElauncher">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Another app's "Add to Home screen": Android asks the default launcher to confirm
+             (apps/PinShortcutActivity.kt). Exported for the system; the request it carries cannot
+             be forged by another app. -->
+        <activity
+            android:name=".apps.PinShortcutActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/Theme.GLANCElauncher.Translucent">
+            <intent-filter>
+                <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
+            </intent-filter>
+        </activity>
+
+        <!-- Notification dots (system/NotificationDotsService.kt): bound by the system only once
+             the user grants notification access from Settings. -->
+        <service
+            android:name=".system.NotificationDotsService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- Double-tap to lock (system/LockScreenService.kt): bound by the system only once the
+             user turns it on in Accessibility settings, after the in-app disclosure. -->
+        <service
+            android:name=".system.LockScreenService"
+            android:exported="true"
+            android:label="@string/lock_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/lock_screen_service" />
+        </service>
+    </application>
+</manifest>

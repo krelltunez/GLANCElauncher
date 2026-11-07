@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GLANCElauncher</string>
+    <string name="lock_service_label">GLANCElauncher: double-tap to lock</string>
+    <string name="lock_service_description">Lets you lock the screen by double-tapping an empty part of GLANCElauncher\'s Home. The service does nothing else: it does not read the screen, see what you type or collect any data.</string>
+</resources>

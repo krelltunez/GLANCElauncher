@@ -1,0 +1,53 @@
+name: Android
+
+# Compiles the launcher and runs both modules' JVM unit tests on every PR and on
+# main. Debug build only: a release build refuses to package without the
+# release key, which CI does not hold, and its code is the same.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: android-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # Accepts the SDK licences, so the Android Gradle plugin can fetch the
+      # platform and build tools compileSdk names.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          # The default list asks for the legacy `tools` package, which current
+          # cmdline-tools no longer carry; AGP fetches the platform it needs.
+          packages: platform-tools
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build and unit-test
+        run: ./gradlew --stacktrace :daydial:test :app:test :app:assembleDebug
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-test-reports
+          path: |
+            app/build/reports/tests/
+            daydial/build/reports/tests/
+          if-no-files-found: ignore

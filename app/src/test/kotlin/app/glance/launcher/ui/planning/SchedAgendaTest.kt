@@ -56,6 +56,24 @@ class SchedAgendaTest {
     }
 
     @Test
+    fun `deadlines by date hold every day's deadlinesOn, for the month grid's flags`() {
+        val yesterday = today.minusDays(1)
+        val tasks = listOf(
+            task("Due today", date = null, start = null, deadline = today),
+            task("Due in a week", date = null, start = null, deadline = today.plusDays(7)),
+            task("Was due, open", date = null, start = null, deadline = yesterday),
+            task("Was due, done", date = null, start = null, deadline = yesterday, done = true),
+            task("Scheduled with deadline", date = today, deadline = today),
+            task("No deadline", date = null, start = null),
+        )
+        val byDate = SchedAgenda.deadlinesByDate(tasks, today)
+        for (d in listOf(yesterday, today, today.plusDays(7), today.plusDays(1))) {
+            assertEquals(SchedAgenda.deadlinesOn(tasks, d, today), byDate[d].orEmpty(), "$d")
+        }
+        assertEquals(setOf(yesterday, today, today.plusDays(7)), byDate.keys)
+    }
+
+    @Test
     fun `overdue holds late scheduled tasks before the window and late inbox deadlines, events excluded`() {
         val tasks = listOf(
             task("Old task", date = today.minusDays(3)),

@@ -40,6 +40,10 @@ object SchedAgenda {
     fun deadlinesOn(tasks: List<Task>, date: LocalDate, today: LocalDate): List<Task> =
         tasks.filter { it.date == null && it.deadline == date && (date >= today || it.completed) }
 
+    /** [deadlinesOn] for every date at once, for a grid of day cells. */
+    fun deadlinesByDate(tasks: List<Task>, today: LocalDate): Map<LocalDate, List<Task>> =
+        tasks.filter { t -> t.date == null && t.deadline != null && (t.deadline >= today || t.completed) }.groupBy { it.deadline!! }
+
     fun days(
         tasks: List<Task>,
         window: List<LocalDate>,

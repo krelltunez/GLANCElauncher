@@ -60,10 +60,29 @@ internal data class CellMetrics(val header: Float, val inset: Float, val padY: F
     }
 }
 
+/** dayGLANCE's deadline mark colour: rose-500 in light, rose-400 in dark. */
+private val DeadlineLight = Color(0xFFF43F5E)
+private val DeadlineDark = Color(0xFFFB7185)
+
+/** An all-day mark's kind, in the order the app stacks them (MonthDayCell.jsx ALL_DAY_ORDER). */
+internal enum class MarkKind { DEADLINE, EVENT, TASK }
+
+/**
+ * The all-day marks in the app's order: deadlines, then events, then tasks, each kind's
+ * open items before its completed ones. [deadlines] are inbox tasks due that day.
+ */
+internal fun allDayMarks(items: List<Task>, deadlines: List<Task>): List<Pair<MarkKind, Task>> {
+    val marks = deadlines.map { MarkKind.DEADLINE to it } +
+        items.filter { it.isAllDay || it.startMin == null }
+            .map { (if (it.source == TaskSource.CALENDAR) MarkKind.EVENT else MarkKind.TASK) to it }
+    return marks.sortedWith(compareBy({ it.first.ordinal }, { it.second.completed }))
+}
+
 /**
  * A day cell as dayGLANCE draws it: a header row with the date number (and the all-day marks
- * beside it), then a mini vertical timeline 07:00 to 21:00 across the usable width. Items
- * that overlap in time split into up to three lanes; anything past that joins a "+N" badge.
+ * beside it: a rose flag for each deadline, then events and tasks), then a mini vertical
+ * timeline 07:00 to 21:00 across the usable width. Items that overlap in time split into up
+ * to three lanes; anything past that joins a "+N" badge.
  */
 @Composable
 fun DayCell(
@@ -71,10 +90,12 @@ fun DayCell(
     modifier: Modifier, onClick: () -> Unit, onLongClick: () -> Unit,
     /** Width over height. 1 is the month grid's square; null fills whatever size the caller gives. */
     aspect: Float? = 1f,
+    /** Inbox tasks due this day (SchedAgenda.deadlinesOn), drawn as flags first among the all-day marks. */
+    deadlines: List<Task> = emptyList(),
 ) {
     val c = GlanceTheme.colors
     val timed = items.filter { it.startMin != null && !it.isAllDay }.sortedBy { it.startMin }
-    val allDay = items.filter { it.isAllDay || it.startMin == null }
+    val allDay = remember(items, deadlines) { allDayMarks(items, deadlines) }
     val laneSlots = remember(timed) {
         assignLanes(timed.mapIndexed { i, t -> LaneInput(i, t.startMin!!, t.startMin!! + maxOf(t.durationMin, 15)) })
     }
@@ -157,13 +178,31 @@ fun DayCell(
                     .then(if (isToday) Modifier.background(c.todayChip, RoundedCornerShape(4.dp)) else Modifier)
                     .padding(horizontal = 3.dp, vertical = 1.dp),
             )
-            for (t in allDay.take(4)) {
-                Box(
-                    Modifier
-                        .size(m.marker.dp)
-                        .alpha(if (t.completed) 0.5f else 1f)
-                        .background(hexColor(t.colorHex), RoundedCornerShape(m.radius.dp)),
-                )
+            val eventCap = if (c.isDark) Color.White.copy(alpha = 0.5f) else Color.Black.copy(alpha = 0.25f)
+            val deadlineColor = if (c.isDark) DeadlineDark else DeadlineLight
+            for ((kind, t) in allDay.take(4)) {
+                Canvas(Modifier.size(m.marker.dp).alpha(if (t.completed) 0.5f else 1f)) {
+                    val s = size.width
+                    val r = androidx.compose.ui.geometry.CornerRadius(m.radius.dp.toPx())
+                    when (kind) {
+                        MarkKind.DEADLINE -> {
+                            // A flag: pole on the left, pennant to the right (the app's AllDayMark).
+                            val inset = 1.dp.toPx()
+                            val notch = 2.dp.toPx()
+                            drawLine(deadlineColor, Offset(inset, 0f), Offset(inset, s), strokeWidth = 1.25.dp.toPx(), cap = StrokeCap.Round)
+                            val pennant = androidx.compose.ui.graphics.Path().apply {
+                                moveTo(inset, 0f); lineTo(s, 0f); lineTo(s - notch, s / 2f - inset / 2f); lineTo(s, s - inset); lineTo(inset, s - inset); close()
+                            }
+                            drawPath(pennant, deadlineColor)
+                        }
+                        MarkKind.EVENT -> {
+                            drawRoundRect(hexColor(t.colorHex), cornerRadius = r)
+                            // Events carry the same darker left cap as their bands.
+                            drawRect(eventCap, Offset.Zero, Size(minOf(m.cap.dp.toPx(), s), s))
+                        }
+                        MarkKind.TASK -> drawRoundRect(hexColor(t.colorHex), cornerRadius = r)
+                    }
+                }
             }
             if (allDay.size > 4) Text("+${allDay.size - 4}", fontSize = 8.sp, color = c.textSecondary)
         }

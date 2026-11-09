@@ -55,7 +55,17 @@ object TaskColors {
     val all = listOf(BLUE, PURPLE, GREEN, ORANGE, PINK, INDIGO, RED, TEAL, YELLOW)
 }
 
-enum class GoalStatus { ACTIVE, COMPLETED, ARCHIVED }
+/**
+ * A goal's or project's status as dayGLANCE sends it. ON_HOLD is a paused project
+ * (dayGLANCE's `on-hold`, decision 78): still open, listed after the active ones,
+ * counted toward its goal's progress, but with no target-date warning.
+ */
+enum class GoalStatus {
+    ACTIVE, ON_HOLD, COMPLETED, ARCHIVED;
+
+    /** Neither completed nor archived: active, or on hold. */
+    val isOpen: Boolean get() = this == ACTIVE || this == ON_HOLD
+}
 
 data class Goal(
     val id: String,

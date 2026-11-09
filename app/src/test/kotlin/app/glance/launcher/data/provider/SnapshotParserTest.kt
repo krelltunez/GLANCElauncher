@@ -39,6 +39,7 @@ class SnapshotParserTest {
             """{"id":"p1","title":"Base training","goalId":"g1","colorHex":"#22c55e","description":"","status":"archived"}""",
             // A project with its own target date (dayGLANCE #2160).
             """{"id":"p2","title":"Roof","goalId":null,"colorHex":"#3b82f6","description":"","status":"active","targetDate":"2026-11-01"}""",
+            """{"id":"p3","title":"Shed","goalId":null,"colorHex":"#3b82f6","description":"","status":"on-hold","targetDate":"2026-10-01"}""",
         ),
         "routines" to listOf(
             """{"id":"r1","name":"Stretch","startTime":"12:30","duration":15,"isAllDay":false,"completed":true}""",
@@ -94,6 +95,9 @@ class SnapshotParserTest {
         assertEquals(LocalDate.of(2027, 1, 10), s.goals.single().targetDate)
         assertEquals(GoalStatus.ACTIVE, s.goals.single().status)
         assertEquals(GoalStatus.ARCHIVED, s.projects.first { it.id == "p1" }.status)
+        // dayGLANCE's paused project (D78) keeps its target date; the UI just draws no warning.
+        assertEquals(GoalStatus.ON_HOLD, s.projects.first { it.id == "p3" }.status)
+        assertEquals(LocalDate.of(2026, 10, 1), s.projects.first { it.id == "p3" }.targetDate)
         // A project's own target date reads like a goal's; absent is null.
         assertEquals(LocalDate.of(2026, 11, 1), s.projects.first { it.id == "p2" }.targetDate)
         assertEquals(null, s.projects.first { it.id == "p1" }.targetDate)

@@ -55,9 +55,10 @@ android {
         targetSdk = libs.versions.targetSdk.get().toInt()
         // ./build-release.sh asks for the versionCode and passes -PversionCode=N, so an upload
         // needs no commit. The literal is the fallback for builds without it (dev builds), kept at
-        // the last code uploaded to Play (3), so a fresh checkout's script suggests the next one.
-        versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 3
-        versionName = "1.0.0"
+        // the last code uploaded to Play (6), so a fresh checkout's script suggests the next one,
+        // and a dev build installs over the Play build without a downgrade error.
+        versionCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 6
+        versionName = "1.0.1"
     }
 
     signingConfigs {

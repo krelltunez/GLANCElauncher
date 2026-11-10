@@ -69,6 +69,7 @@ import app.glance.launcher.data.Cadence
 import app.glance.launcher.data.CadenceState
 import app.glance.launcher.data.Chore
 import app.glance.launcher.data.Goal
+import app.glance.launcher.data.GoalStatus
 import app.glance.launcher.data.Person
 import app.glance.launcher.data.ProgressMath
 import app.glance.launcher.data.Project
@@ -408,9 +409,14 @@ private fun ProjectsSection(projects: List<Project>, tasks: List<Task>, jumps: C
                     GlanceCard(Modifier.weight(1f).clickable { GlanceIntents.openProject(context, p.id) }, accentTop = hexColor(p.colorHex), padding = androidx.compose.foundation.layout.PaddingValues(start = 12.dp, end = 12.dp, top = 14.dp, bottom = 12.dp)) {
                         // The project's own target date (dayGLANCE #2160) at the top right,
                         // beside the title; the title gives way first when space is short.
+                        // A project on hold says so there instead, with no date warning (D78).
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(p.title, color = c.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                            p.targetDate?.let { TargetDateText(it, LocalDate.now(), Modifier.padding(start = 8.dp)) }
+                            if (p.status == GoalStatus.ON_HOLD) {
+                                Text("On hold", color = c.textMuted, fontSize = 11.sp, maxLines = 1, modifier = Modifier.padding(start = 8.dp))
+                            } else {
+                                p.targetDate?.let { TargetDateText(it, LocalDate.now(), Modifier.padding(start = 8.dp)) }
+                            }
                         }
                         Spacer(Modifier.height(8.dp))
                         ProgressBar(pr.fraction, c.accent, height = 6.dp)

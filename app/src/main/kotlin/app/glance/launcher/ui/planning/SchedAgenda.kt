@@ -155,12 +155,19 @@ object SchedAgenda {
     fun nextSlot(nowMin: Int): Int = ((nowMin + 1 + 14) / 15) * 15
 
     /**
-     * The Planning screen's Projects section: active projects linked to no goal, as
-     * dayGLANCE's Goals dashboard lists them (`standaloneProjects`). A goal's projects
-     * show as its row's bars in the Goals section instead.
+     * The Planning screen's Projects section: open projects linked to no goal, as
+     * dayGLANCE's Goals dashboard lists them (`standaloneProjects`), the ones on hold
+     * after the active ones (decision 78). A goal's projects show as its row's bars in
+     * the Goals section instead.
      */
     fun standaloneProjects(projects: List<Project>): List<Project> =
-        projects.filter { it.status == GoalStatus.ACTIVE && it.goalId.isNullOrEmpty() }
+        pausedLast(projects.filter { it.status.isOpen && it.goalId.isNullOrEmpty() })
+
+    /** [projects] with the on-hold ones after the others, each side in its given order (dayGLANCE's `pausedLast`). */
+    fun pausedLast(projects: List<Project>): List<Project> {
+        val (paused, rest) = projects.partition { it.status == GoalStatus.ON_HOLD }
+        return rest + paused
+    }
 
     /**
      * The Planning screen's Goals section: active goals by target date, soonest (so overdue)
@@ -176,11 +183,12 @@ object SchedAgenda {
     }
 
     /**
-     * `groupProjectsForFilter`: one group per goal (goal order, goals with active projects only),
-     * then a "Standalone" group for goal-less or orphaned projects.
+     * `groupProjectsForFilter`: one group per goal (goal order, goals with open projects only),
+     * then a "Standalone" group for goal-less or orphaned projects. A project on hold is still
+     * offered, after the active ones in its group, as dayGLANCE's pickers offer it (decision 78).
      */
     fun projectGroups(projects: List<Project>, goals: List<Goal>): List<ProjectGroup> {
-        val active = projects.filter { it.status == GoalStatus.ACTIVE }
+        val active = pausedLast(projects.filter { it.status.isOpen })
         val visibleGoals = goals.filter { it.status != GoalStatus.ARCHIVED }
         val groups = visibleGoals.map { g -> ProjectGroup(g.title, active.filter { it.goalId == g.id }) }.filter { it.projects.isNotEmpty() }
         val goalIds = visibleGoals.map { it.id }.toSet()

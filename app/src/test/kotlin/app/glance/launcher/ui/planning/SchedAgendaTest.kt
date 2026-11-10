@@ -192,6 +192,30 @@ class SchedAgendaTest {
     }
 
     @Test
+    fun `a project on hold is still offered, after the active ones in its group (D78)`() {
+        val goals = listOf(Goal("g1", "Fitness"))
+        val projects = listOf(
+            Project("p1", "Paused", goalId = "g1", status = GoalStatus.ON_HOLD),
+            Project("p2", "Base", goalId = "g1"),
+            Project("p3", "Loose, paused", status = GoalStatus.ON_HOLD),
+            Project("p4", "Loose"),
+        )
+        val groups = SchedAgenda.projectGroups(projects, goals)
+        assertEquals(listOf("Base", "Paused"), groups[0].projects.map { it.title })
+        assertEquals(listOf("Loose", "Loose, paused"), groups[1].projects.map { it.title })
+    }
+
+    @Test
+    fun `the Planning Projects section lists projects on hold after the active ones (D78)`() {
+        val projects = listOf(
+            Project("p1", "Paused", status = GoalStatus.ON_HOLD),
+            Project("p2", "Loose"),
+            Project("p3", "Done", status = GoalStatus.COMPLETED),
+        )
+        assertEquals(listOf("Loose", "Paused"), SchedAgenda.standaloneProjects(projects).map { it.title })
+    }
+
+    @Test
     fun `goals run soonest target date first, then undated goals most complete first`() {
         val goals = listOf(
             Goal("g1", "Undated, half done"),

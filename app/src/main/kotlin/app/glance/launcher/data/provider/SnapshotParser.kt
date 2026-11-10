@@ -182,6 +182,7 @@ object SnapshotParser {
     private fun status(s: String?): GoalStatus = when (s?.lowercase()) {
         "completed", "done" -> GoalStatus.COMPLETED
         "archived" -> GoalStatus.ARCHIVED
+        "on-hold" -> GoalStatus.ON_HOLD
         else -> GoalStatus.ACTIVE
     }
 

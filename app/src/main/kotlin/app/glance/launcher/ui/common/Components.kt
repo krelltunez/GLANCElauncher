@@ -38,8 +38,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontStyle
@@ -190,13 +188,20 @@ fun AppIcon(entry: AppEntry, apps: AppsRepository, size: Dp = 48.dp, modifier: M
     // any list without item keys) kept the previous app's bitmap, and the loader, seeing a
     // value, never replaced it: apps showed other apps' icons.
     var bitmap by remember(cacheKey) { mutableStateOf(apps.bitmapCache[cacheKey]) }
-    LaunchedEffect(cacheKey) {
-        if (bitmap == null) {
-            bitmap = withContext(Dispatchers.IO) {
-                apps.bitmapCache[cacheKey] ?: (themed?.let { apps.themedIcon(entry, it.tile.toArgb(), it.glyph.toArgb()) } ?: apps.icon(entry))
-                    ?.let { drawableToBitmap(it, 144).asImageBitmap() }?.also { apps.bitmapCache[cacheKey] = it }
-            }
+    // A new epoch: some app changed (an update) and its bitmap was dropped. Others find theirs
+    // cached; that app's keeps showing its old icon until the new one is drawn.
+    val epoch by apps.iconEpoch.collectAsState()
+    LaunchedEffect(cacheKey, epoch) {
+        val cached = apps.bitmapCache[cacheKey]
+        if (cached != null) {
+            bitmap = cached
+            return@LaunchedEffect
         }
+        withContext(Dispatchers.IO) {
+            apps.iconBitmap(cacheKey, ICON_PX) {
+                themed?.let { apps.themedIcon(entry, it.tile.toArgb(), it.glyph.toArgb()) } ?: apps.icon(entry)
+            }
+        }?.let { bitmap = it }
     }
     val bmp = bitmap
     val dot = notificationDot && NotificationDots.has(LocalNotificationDots.current, entry.packageName, entry.user, remember { Process.myUserHandle() })
@@ -233,9 +238,7 @@ fun ShortcutIcon(shortcut: AppShortcut, apps: AppsRepository, size: Dp = 28.dp, 
     var missing by remember(cacheKey) { mutableStateOf(false) }
     LaunchedEffect(cacheKey) {
         if (bitmap == null) {
-            bitmap = withContext(Dispatchers.IO) {
-                apps.bitmapCache[cacheKey] ?: apps.shortcutIcon(shortcut)?.let { drawableToBitmap(it, 144).asImageBitmap() }?.also { apps.bitmapCache[cacheKey] = it }
-            }
+            bitmap = withContext(Dispatchers.IO) { apps.iconBitmap(cacheKey, ICON_PX) { apps.shortcutIcon(shortcut) } }
             missing = bitmap == null
         }
     }
@@ -254,6 +257,9 @@ fun PinIcon(pin: Pin, apps: AppsRepository, size: Dp = 48.dp, modifier: Modifier
     is Pin.App -> AppIcon(pin.entry, apps, size, modifier, notificationDot)
     is Pin.Shortcut -> ShortcutIcon(pin.shortcut, apps, size, modifier)
 }
+
+/** The pixel size app and shortcut icons are rendered at, whatever size they show at. */
+private const val ICON_PX = 144
 
 fun drawableToBitmap(drawable: Drawable, sizePx: Int): Bitmap {
     if (drawable is BitmapDrawable && drawable.bitmap != null) return drawable.bitmap

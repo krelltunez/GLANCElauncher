@@ -14,8 +14,11 @@ import android.os.Build
 import android.os.Process
 import android.os.UserHandle
 import android.provider.Settings
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import app.glance.launcher.prefs.LauncherPrefs
 import app.glance.launcher.system.LaunchOptions
+import app.glance.launcher.ui.common.drawableToBitmap
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,18 +45,46 @@ class AppsRepository(private val context: Context, private val prefs: LauncherPr
     /** Every launchable activity, alphabetical, including hidden ones. */
     val apps: StateFlow<List<AppEntry>> = _apps.asStateFlow()
 
-    private val iconCache = HashMap<String, Drawable>()
-    /** Rendered icon bitmaps by component key and pixel size, so a scrolling grid never re-decodes. */
-    val bitmapCache = java.util.concurrent.ConcurrentHashMap<String, androidx.compose.ui.graphics.ImageBitmap>()
+    /**
+     * Rendered icon bitmaps by cache key ([app.glance.launcher.ui.theme.ThemedIcons.cacheKey], or
+     * [SHORTCUT_BITMAP_PREFIX] and the shortcut's key), so a scrolling grid never re-decodes. Read
+     * it directly for a first frame; [iconBitmap] fills it.
+     */
+    val bitmapCache = java.util.concurrent.ConcurrentHashMap<String, ImageBitmap>()
+    /** One lock per cache key: an icon on screen twice at once (the drawer's recent row and its list) is rendered once. */
+    private val renderLocks = java.util.concurrent.ConcurrentHashMap<String, Any>()
+
+    private val _iconEpoch = MutableStateFlow(0)
+    /**
+     * Moves on whenever [forgetIcons] drops an app's bitmaps, so icons on screen look again: the
+     * dropped ones redraw from the app's current icon, the rest find theirs still cached.
+     */
+    val iconEpoch: StateFlow<Int> = _iconEpoch.asStateFlow()
 
     private val callback = object : LauncherApps.Callback() {
-        override fun onPackageRemoved(packageName: String?, user: UserHandle?) = refresh()
-        override fun onPackageAdded(packageName: String?, user: UserHandle?) = refresh()
-        override fun onPackageChanged(packageName: String?, user: UserHandle?) = refresh()
-        override fun onPackagesAvailable(packageNames: Array<out String>?, user: UserHandle?, replacing: Boolean) = refresh()
-        override fun onPackagesUnavailable(packageNames: Array<out String>?, user: UserHandle?, replacing: Boolean) = refresh()
+        override fun onPackageRemoved(packageName: String?, user: UserHandle?) = changed(packageName)
+        override fun onPackageAdded(packageName: String?, user: UserHandle?) = changed(packageName)
+        override fun onPackageChanged(packageName: String?, user: UserHandle?) = changed(packageName)
+        override fun onPackagesAvailable(packageNames: Array<out String>?, user: UserHandle?, replacing: Boolean) = changed(*packageNames.orEmpty())
+        override fun onPackagesUnavailable(packageNames: Array<out String>?, user: UserHandle?, replacing: Boolean) = changed(*packageNames.orEmpty())
         // An app published, changed or removed shortcuts (a messaging app's conversations change often).
         override fun onShortcutsChanged(packageName: String, shortcuts: MutableList<ShortcutInfo>, user: UserHandle) = refreshShortcuts()
+    }
+
+    /** An app was installed, updated or removed: its icon may have changed with it. */
+    private fun changed(vararg packageNames: String?) {
+        forgetIcons(packageNames.filterNotNull())
+        refresh()
+    }
+
+    /**
+     * Drops the rendered icons of [packageNames]' apps (plain and themed). An update can change an
+     * app's icon; without this the launcher kept the old one, or a bad render of it, until restarted.
+     */
+    fun forgetIcons(packageNames: Collection<String>) {
+        if (packageNames.isEmpty()) return
+        val removed = bitmapCache.keys.removeAll { key -> packageNames.any { IconKeys.isOfPackage(key, it) } }
+        if (removed) _iconEpoch.value += 1
     }
 
     fun refresh() {
@@ -67,16 +98,34 @@ class AppsRepository(private val context: Context, private val prefs: LauncherPr
         refreshShortcuts()
     }
 
+    /**
+     * The app's icon, loaded fresh on each call: a new Drawable for this caller alone. Not cached,
+     * because a Drawable is not safe to draw from two threads, and an AdaptiveIconDrawable shows
+     * it: it fills a bitmap it keeps with black, draws its two layers into it, and paints the icon
+     * from that bitmap, so a second thread drawing the same instance caught it half done (an
+     * all-black or garbled icon, which [bitmapCache] then kept). [iconBitmap] renders each app once.
+     */
     fun icon(entry: AppEntry): Drawable? {
-        iconCache[entry.key]?.let { return it }
         val density = context.resources.displayMetrics.densityDpi
         val info = launcherApps.resolveActivity(
             Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(entry.component),
             entry.user ?: Process.myUserHandle(),
         ) ?: return null
-        val d = info.getIcon(density) ?: return null
-        iconCache[entry.key] = d
-        return d
+        return info.getIcon(density)
+    }
+
+    /**
+     * The bitmap cached under [cacheKey], or [load]'s Drawable rendered at [sizePx] and cached.
+     * Blocking: call it off the main thread. Renders of one key take turns, so the second finds
+     * the first's bitmap; null when [load] has no icon, which is not cached and so tried again.
+     */
+    fun iconBitmap(cacheKey: String, sizePx: Int, load: () -> Drawable?): ImageBitmap? {
+        bitmapCache[cacheKey]?.let { return it }
+        synchronized(renderLocks.getOrPut(cacheKey) { Any() }) {
+            bitmapCache[cacheKey]?.let { return it }
+            val drawable = load() ?: return null
+            return drawableToBitmap(drawable, sizePx).asImageBitmap().also { bitmapCache[cacheKey] = it }
+        }
     }
 
     /**
@@ -127,7 +176,6 @@ class AppsRepository(private val context: Context, private val prefs: LauncherPr
 
     /** The platform objects behind [shortcuts], for their icons and the launch; replaced whole on each load. */
     @Volatile private var shortcutInfos: Map<String, ShortcutInfo> = emptyMap()
-    private val shortcutIconCache = java.util.concurrent.ConcurrentHashMap<String, Drawable>()
     /** One load at a time, off the main thread: the query is a binder call across every app. */
     private val shortcutLoader = java.util.concurrent.Executors.newSingleThreadExecutor()
     private val shortcutLoadQueued = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -181,7 +229,6 @@ class AppsRepository(private val context: Context, private val prefs: LauncherPr
         shortcutInfos = byKey
         // A shortcut keeps its id when its icon changes (a contact's new photo): drop the cached
         // ones, which the rows reload as they draw.
-        shortcutIconCache.clear()
         bitmapCache.keys.removeAll { it.startsWith(SHORTCUT_BITMAP_PREFIX) }
         _shortcuts.value = list
     }
@@ -205,12 +252,10 @@ class AppsRepository(private val context: Context, private val prefs: LauncherPr
         }
     }
 
+    /** The shortcut's own icon, loaded fresh on each call, as [icon] is and for the same reason. */
     fun shortcutIcon(shortcut: AppShortcut): Drawable? {
-        shortcutIconCache[shortcut.key]?.let { return it }
         val info = shortcutInfos[shortcut.key] ?: return null
-        val d = runCatching { launcherApps.getShortcutIconDrawable(info, context.resources.displayMetrics.densityDpi) }.getOrNull() ?: return null
-        shortcutIconCache[shortcut.key] = d
-        return d
+        return runCatching { launcherApps.getShortcutIconDrawable(info, context.resources.displayMetrics.densityDpi) }.getOrNull()
     }
 
     /**
@@ -284,7 +329,7 @@ class AppsRepository(private val context: Context, private val prefs: LauncherPr
 
     companion object {
         /** [bitmapCache] keys of shortcut icons ([app.glance.launcher.ui.common.ShortcutIcon]). */
-        const val SHORTCUT_BITMAP_PREFIX = "shortcut:"
+        const val SHORTCUT_BITMAP_PREFIX = IconKeys.SHORTCUT_PREFIX
         private val SHORTCUT_QUERY_FLAGS: Int = LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or
             LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC or
             LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED or

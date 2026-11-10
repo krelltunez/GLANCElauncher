@@ -38,6 +38,10 @@ object ThemedIcons {
         colors.dark -> "${PREFIX}dark:$appKey"
         else -> "${PREFIX}light:$appKey"
     }
+
+    /** The app key [cacheKey] was made from: [cacheKey] undone. */
+    fun appKeyOf(cacheKey: String): String =
+        if (cacheKey.startsWith(PREFIX)) cacheKey.removePrefix(PREFIX).substringAfter(':') else cacheKey
 }
 
 /** Provided by [GlanceLauncherTheme]: null while themed icons are off or unsupported. */

@@ -339,7 +339,7 @@ fun DayDial(
         }
 
         if (complications.any { it != null }) {
-            DialComplicationsLayer(complications, sidePx, typography.sans, Modifier.size(sideDp))
+            DialComplicationsLayer(complications, sidePx, typography.sans, Modifier.fillMaxSize())
         }
 
         DialHub(

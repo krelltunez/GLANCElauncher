@@ -6,7 +6,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -23,7 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -31,7 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.math.sqrt
+import kotlin.math.roundToInt
 
 /**
  * A corner readout on the dial face. Four slots: top-left, top-right, bottom-left,
@@ -76,10 +75,11 @@ fun complicationTier(dialPx: Float): ComplicationTier? {
     return found
 }
 
-/** Slot centres as a fraction of the dial radius: 1.2 along each diagonal, clearing the hour labels at 0.96. */
-private const val SLOT_R = 1.2f
-private val SLOT_DIAGONAL = (1.0 / sqrt(2.0)).toFloat()
-
+/**
+ * The four slots, placed in the room around the dial ([ComplicationPlacement]). The layer fills
+ * the dial's whole box, which may be wider or taller than the dial: the slots use that room
+ * rather than hang off the dial's square.
+ */
 @Composable
 internal fun DialComplicationsLayer(
     complications: List<DialComplication?>,
@@ -88,40 +88,61 @@ internal fun DialComplicationsLayer(
     modifier: Modifier = Modifier,
 ) {
     val tier = complicationTier(dialPx) ?: return
-    val density = LocalDensity.current
-    val radiusDp = with(density) { (dialPx / 2f).toDp() }
-    val d = radiusDp * SLOT_R * SLOT_DIAGONAL
-    val slots = listOf(Pair(-d, -d), Pair(d, -d), Pair(-d, d), Pair(d, d))
-    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        for ((i, c) in complications.take(4).withIndex()) {
-            if (c == null) continue
-            val (dx, dy) = slots[i]
-            // Each slot is centred on its diagonal point; the column's own size is unknown
-            // up front, so offset by the dot radius and let the label hang below.
-            Column(
-                Modifier
-                    .offset(x = dx, y = dy)
-                    .widthIn(max = 136.dp)
-                    .then(if (c.onClick != null) Modifier.clickable { c.onClick?.invoke() } else Modifier),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                when (c) {
-                    is DialComplication.Count -> CountSlot(c, tier, sans)
-                    is DialComplication.Ring -> RingSlot(c, tier, sans)
-                }
-                Text(
-                    c.label.uppercase(),
-                    color = DialColors.Ink.copy(alpha = 0.35f),
-                    fontSize = tier.labelSp.sp,
-                    letterSpacing = (tier.labelSp * 0.12f).sp,
-                    fontFamily = sans,
-                    textAlign = TextAlign.Center,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 3.dp),
+    val slots = complications.take(4)
+    Layout(
+        content = {
+            for (c in slots) {
+                // An empty slot keeps its place, so the next one does not slide into it.
+                if (c == null) Box(Modifier) else ComplicationSlot(c, tier, sans)
+            }
+        },
+        modifier = modifier,
+    ) { measurables, constraints ->
+        val placeables = measurables.map { it.measure(constraints.copy(minWidth = 0, minHeight = 0)) }
+        val width = if (constraints.hasBoundedWidth) constraints.maxWidth else dialPx.roundToInt()
+        val height = if (constraints.hasBoundedHeight) constraints.maxHeight else dialPx.roundToInt()
+        // One offset for all four, from the largest slot, so they mirror one another.
+        val at = ComplicationPlacement.place(
+            width.toFloat(), height.toFloat(), dialPx / 2f,
+            placeables.maxOf { it.width }.toFloat(), placeables.maxOf { it.height }.toFloat(),
+        )
+        layout(width, height) {
+            for ((i, p) in placeables.withIndex()) {
+                val sx = if (i % 2 == 0) -1 else 1
+                val sy = if (i < 2) -1 else 1
+                p.place(
+                    (width / 2f + sx * at.x - p.width / 2f).roundToInt(),
+                    (height / 2f + sy * at.y - p.height / 2f).roundToInt(),
                 )
             }
         }
+    }
+}
+
+/** One readout: its dial (a count or a ring) with the label below. */
+@Composable
+private fun ComplicationSlot(c: DialComplication, tier: ComplicationTier, sans: FontFamily) {
+    Column(
+        Modifier
+            .widthIn(max = 136.dp)
+            .then(if (c.onClick != null) Modifier.clickable { c.onClick?.invoke() } else Modifier),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        when (c) {
+            is DialComplication.Count -> CountSlot(c, tier, sans)
+            is DialComplication.Ring -> RingSlot(c, tier, sans)
+        }
+        Text(
+            c.label.uppercase(),
+            color = DialColors.Ink.copy(alpha = 0.35f),
+            fontSize = tier.labelSp.sp,
+            letterSpacing = (tier.labelSp * 0.12f).sp,
+            fontFamily = sans,
+            textAlign = TextAlign.Center,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 3.dp),
+        )
     }
 }
 

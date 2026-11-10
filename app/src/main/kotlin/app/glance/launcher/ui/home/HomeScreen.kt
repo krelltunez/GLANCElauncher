@@ -261,7 +261,8 @@ fun HomeScreen(controller: LauncherController, modifier: Modifier = Modifier) {
                     Modifier.fillMaxHeight().width(dialSide).clip(RoundedCornerShape(20.dp)).background(DialColors.Face),
                     contentAlignment = Alignment.Center,
                 ) {
-                    DialPanel(controller, dayBlocks, dialTasks, dialFrames, dialRoutines, shape, nowMin, today, date, use24, lastGlance, Modifier.size(dialSide))
+                    // The whole panel, not the dial's square: the corner readouts use the room above and below.
+                    DialPanel(controller, dayBlocks, dialTasks, dialFrames, dialRoutines, shape, nowMin, today, date, use24, lastGlance, Modifier.fillMaxSize())
                 }
                 Spacer(Modifier.width(16.dp))
                 // Everything takes its natural height except the week strip, which gets what is left.
@@ -300,7 +301,8 @@ fun HomeScreen(controller: LauncherController, modifier: Modifier = Modifier) {
                         Modifier.fillMaxWidth().height(side).clip(RoundedCornerShape(20.dp)).background(DialColors.Face),
                         contentAlignment = Alignment.Center,
                     ) {
-                        DialPanel(controller, dayBlocks, dialTasks, dialFrames, dialRoutines, shape, nowMin, today, date, use24, lastGlance, Modifier.size(side))
+                        // The whole panel, not the dial's square: the corner readouts use the room at the sides.
+                        DialPanel(controller, dayBlocks, dialTasks, dialFrames, dialRoutines, shape, nowMin, today, date, use24, lastGlance, Modifier.fillMaxSize())
                     }
                 }
                 Spacer(Modifier.height(gap))

@@ -922,7 +922,8 @@ private fun PinnedRow(controller: LauncherController, compact: Boolean = false) 
             .border(1.dp, c.border, RoundedCornerShape(12.dp))
             .padding(horizontal = 10.dp, vertical = if (compact) 4.dp else 8.dp),
     ) {
-        val fit = PinnedLayout.fit(maxWidth.value - buttonDp, PINNED_SLOT_DP, PINNED_GAP_DP)
+        val iconDp = if (compact) 40f else 48f
+        val fit = PinnedLayout.fit(maxWidth.value - buttonDp, iconDp, PINNED_MIN_GAP_DP)
         val (shown, overflow) = PinnedLayout.split(entries, fit)
         val hasOverflow = overflow.isNotEmpty()
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -932,8 +933,16 @@ private fun PinnedRow(controller: LauncherController, compact: Boolean = false) 
                     color = c.textMuted, fontSize = 12.sp, modifier = Modifier.weight(1f).padding(vertical = 8.dp),
                 )
             } else {
-                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(PINNED_GAP_DP.dp)) {
-                    for (entry in shown) androidx.compose.runtime.key(entry.key) { PinnedApp(entry, controller, compact) }
+                // The width before the button is split into [fit] equal slots, each an icon with
+                // its share of the spare room on either side: a full row has even gaps all the
+                // way to the button. Fewer pins keep the same slots, and the empty ones stay
+                // before the button as room for more. Weights, not fixed widths, so the slots add
+                // up to the width exactly, with no pixel left over or short.
+                Row(Modifier.weight(1f)) {
+                    for (entry in shown) androidx.compose.runtime.key(entry.key) {
+                        PinnedApp(entry, controller, compact, Modifier.weight(1f))
+                    }
+                    if (shown.size < fit) Spacer(Modifier.weight((fit - shown.size).toFloat()))
                 }
             }
             // "+N" opens the rest and the editor; with nothing hidden it is the editor's pencil.
@@ -968,8 +977,8 @@ private fun PinnedRow(controller: LauncherController, compact: Boolean = false) 
     }
 }
 
-private const val PINNED_SLOT_DP = 64f
-private const val PINNED_GAP_DP = 6f
+/** The least room beside each pinned icon; what is left over spreads evenly across the slots. */
+private const val PINNED_MIN_GAP_DP = 16f
 
 /** The pins that did not fit on the row, four to a line, and the editor. */
 @Composable
@@ -1034,7 +1043,7 @@ private object AboveAnchor : androidx.compose.ui.window.PopupPositionProvider {
 }
 
 @Composable
-private fun PinnedApp(entry: app.glance.launcher.apps.Pin, controller: LauncherController, compact: Boolean) {
+private fun PinnedApp(entry: app.glance.launcher.apps.Pin, controller: LauncherController, compact: Boolean, modifier: Modifier = Modifier) {
     val apps = controller.graph.apps
     // Tap launches. A long-press opens the app's menu (its shortcuts, App info, unpin, ...) the
     // moment it registers, as the drawer's does; carrying on into a drag upward closes the menu
@@ -1043,9 +1052,9 @@ private fun PinnedApp(entry: app.glance.launcher.apps.Pin, controller: LauncherC
     // no long-press of its own treats releasing a held press as a tap, which would also launch
     // the app under the menu. Reordering lives in the pencil's editor.
     var dragUp by remember { mutableStateOf(0f) }
+    // The whole slot is the touch target, so the gaps between icons are not dead space.
     Column(
-        Modifier
-            .width(64.dp)
+        modifier
             .combinedClickable(onClick = { apps.launch(entry) }, onLongClick = { controller.appMenuFor = entry })
             .pointerInput(entry.key) {
                 detectDragGesturesAfterLongPress(

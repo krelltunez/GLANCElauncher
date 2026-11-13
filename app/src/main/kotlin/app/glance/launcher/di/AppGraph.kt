@@ -6,6 +6,7 @@ import app.glance.launcher.data.FakeRepository
 import app.glance.launcher.data.GlanceRepository
 import app.glance.launcher.data.ProviderRepository
 import app.glance.launcher.data.provider.AndroidGlanceClient
+import app.glance.launcher.data.provider.FileSnapshotCache
 import app.glance.launcher.data.provider.PrefsOutboxStore
 import app.glance.launcher.prefs.LauncherPrefs
 import kotlinx.coroutines.CoroutineScope
@@ -34,6 +35,7 @@ class AppGraph(context: Context) {
         store = PrefsOutboxStore(context),
         scope = scope,
         demoOverride = prefs.demoData,
+        cache = FileSnapshotCache(context),
     ).also { it.start() }
     val repository: GlanceRepository = providerRepository
     val apps: AppsRepository = AppsRepository(context, prefs)

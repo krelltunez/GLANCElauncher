@@ -47,10 +47,11 @@ class ProviderRepositoryTest {
     private val scope = CoroutineScope(Dispatchers.Unconfined)
 
     private val demo = kotlinx.coroutines.flow.MutableStateFlow(false)
+    private val cache = MemorySnapshotCache()
 
     private fun repo(storeJson: String? = null): ProviderRepository {
         if (storeJson != null) store.save(storeJson)
-        return ProviderRepository(client, fallback, store, scope, clock, Dispatchers.Unconfined, demo)
+        return ProviderRepository(client, fallback, store, scope, clock, Dispatchers.Unconfined, demo, cache)
     }
 
     private fun dayRows(handled: List<String> = emptyList(), tasks: List<String> = listOf(
@@ -375,5 +376,71 @@ class ProviderRepositoryTest {
         kotlinx.coroutines.delay(ProviderRepository.DEBOUNCE_MS * 4)
         assertTrue(r.tasks.value.isEmpty())
         r.stop()
+    }
+
+    @Test
+    fun `a cold start shows the installed apps and their last snapshots before any read`() = runBlocking {
+        client.installed[GlanceApp.DAYGLANCE] = true
+        client.installed[GlanceApp.LASTGLANCE] = true
+        client.rows[GlanceApp.DAYGLANCE] = dayRows()
+        client.rows[GlanceApp.LASTGLANCE] = lastRows()
+        repo().refreshAll()
+        assertEquals(dayRows(), cache.rows[GlanceApp.DAYGLANCE])
+        assertEquals(lastRows(), cache.rows[GlanceApp.LASTGLANCE])
+
+        // The launcher is killed and starts again: nothing has been read yet.
+        val cold = repo()
+        val a = cold.availability.value
+        assertTrue(a.dayGlanceInstalled)
+        assertTrue(a.lastGlanceInstalled)
+        assertEquals(DataSource.LIVE, a.dayGlance)
+        assertEquals(DataSource.LIVE, a.lastGlance)
+        assertEquals(now.minusSeconds(120), a.dayGlanceUpdatedAt)
+        assertEquals(listOf("t1"), cold.tasks.value.map { it.id })
+        assertEquals(listOf("c1"), cold.chores.value.map { it.id })
+        assertEquals(listOf("p1"), cold.people.value.map { it.id })
+    }
+
+    @Test
+    fun `a cold start with nothing cached knows what is installed and shows the demo for it`() {
+        client.installed[GlanceApp.DAYGLANCE] = true
+        val cold = repo()
+        assertTrue(cold.availability.value.dayGlanceInstalled)
+        assertFalse(cold.availability.value.lastGlanceInstalled)
+        assertEquals(DataSource.DEMO, cold.availability.value.dayGlance)
+        assertEquals(fallback.tasks.value, cold.tasks.value)
+    }
+
+    @Test
+    fun `an app removed since, or a read refused, forgets its cached snapshot`() = runBlocking {
+        cache.rows[GlanceApp.DAYGLANCE] = dayRows()
+        cache.rows[GlanceApp.LASTGLANCE] = lastRows()
+        // dayGLANCE was uninstalled: its cache is not shown, and the read drops it.
+        client.installed[GlanceApp.LASTGLANCE] = true
+        client.rows[GlanceApp.LASTGLANCE] = null
+        val r = repo()
+        assertEquals(DataSource.DEMO, r.availability.value.dayGlance)
+        assertEquals(fallback.tasks.value, r.tasks.value)
+        // lastGLANCE is shown from the cache until its read is refused, then the demo, as before.
+        assertEquals(DataSource.LIVE, r.availability.value.lastGlance)
+        r.refreshAll()
+        assertEquals(DataSource.DEMO, r.availability.value.lastGlance)
+        assertTrue(cache.rows.isEmpty())
+    }
+
+    @Test
+    fun `below Android 12 a cached snapshot is not shown`() {
+        client.realDataSupported = false
+        client.installed[GlanceApp.DAYGLANCE] = true
+        cache.rows[GlanceApp.DAYGLANCE] = dayRows()
+        assertEquals(DataSource.DEMO, repo().availability.value.dayGlance)
+    }
+
+    @Test
+    fun `cached rows round-trip, quotes and all`() {
+        val rows = dayRows()
+        assertEquals(rows, SnapshotCache.decode(SnapshotCache.encode(rows)))
+        assertNull(SnapshotCache.decode(null))
+        assertNull(SnapshotCache.decode("not json"))
     }
 }

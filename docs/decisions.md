@@ -769,3 +769,14 @@ entries by number, so the numbers never change. Files and pull requests named "i
     `pausedLast`), and the card says "On hold" where the target date goes, with no warning. It
     still counts toward its goal's progress, since `ProgressMath.goal` already counts every
     project that is not archived. dayGLANCE never sends the status on a goal.
+79. **A cold start opens on the last snapshot, not the demo.** The repository started out
+    believing neither app was installed and read the two providers one after the other, each
+    having to start its app's process. Home opened on the demo with "Install dayGLANCE / Install
+    lastGLANCE" for about 1.5 s on the Pixel Tablet, which a Play user would see after every update
+    and every time Android restarts the launcher. Which apps are installed is now checked when
+    the repository is built (under a millisecond), and each provider's last rows are kept in
+    `noBackupFilesDir` (`FileSnapshotCache`, out of device backups since they copy the user's data)
+    and parsed again at start. That load runs off the main thread (about 150 ms for 1,100 tasks on a
+    debug build) and lands before the first frame; a provider read that lands first wins. A
+    missing app or a refused read forgets its rows, as that read already showed the demo. The two
+    providers are now read at the same time.

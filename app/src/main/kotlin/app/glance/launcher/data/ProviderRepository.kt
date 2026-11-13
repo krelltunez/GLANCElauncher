@@ -4,10 +4,12 @@ import app.glance.launcher.data.provider.DayGlanceSnapshot
 import app.glance.launcher.data.provider.GlanceApp
 import app.glance.launcher.data.provider.GlanceClient
 import app.glance.launcher.data.provider.LastGlanceSnapshot
+import app.glance.launcher.data.provider.MemorySnapshotCache
 import app.glance.launcher.data.provider.Outbox
 import app.glance.launcher.data.provider.OutboxEntry
 import app.glance.launcher.data.provider.OutboxStore
 import app.glance.launcher.data.provider.Patch
+import app.glance.launcher.data.provider.SnapshotCache
 import app.glance.launcher.data.provider.SnapshotParser
 import java.time.Clock
 import java.time.Instant
@@ -17,6 +19,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -37,6 +40,10 @@ import org.json.JSONObject
  * the pending writes, and the fallback's own flows. [availability] says which apps are installed,
  * which are live rather than demo, and how old each live snapshot is.
  *
+ * A cold start shows each installed app's last snapshot from [cache] until its provider has been
+ * read again, so Home opens on the user's own data, not the demo and an install banner for apps
+ * that are there; see [refresh].
+ *
  * [demoOverride] (the screenshot demo, debug builds only) shows the fallback for both apps and
  * sends writes to it, while the providers are still read and the outbox still delivered, so
  * turning it off shows live data at once and leaves the user's data and queued writes alone.
@@ -49,6 +56,7 @@ class ProviderRepository(
     private val clock: Clock = Clock.systemDefaultZone(),
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val demoOverride: StateFlow<Boolean> = MutableStateFlow(false),
+    private val cache: SnapshotCache = MemorySnapshotCache(),
 ) : GlanceRepository {
 
     private val day = MutableStateFlow<DayGlanceSnapshot?>(null)
@@ -59,6 +67,8 @@ class ProviderRepository(
     private val lastSent = HashMap<String, Instant>()
     private val refreshJobs = HashMap<GlanceApp, Job>()
     private val observers = ArrayList<AutoCloseable>()
+    /** Apps whose provider has been read since start: their cached snapshot no longer applies. */
+    private val read = HashSet<GlanceApp>()
 
     private val _tasks = MutableStateFlow(fallback.tasks.value)
     private val _goals = MutableStateFlow(fallback.goals.value)
@@ -100,7 +110,36 @@ class ProviderRepository(
     }
 
     init {
+        // Without this, Home opened on the demo and the install banner for a second or two, until
+        // the providers' processes had started and answered. Which apps are installed is a quick
+        // PackageManager lookup (under a millisecond), so it is known before the first frame.
+        installed.value = GlanceApp.values().associateWith { client.isInstalled(it) }
         recompute()
+        // What each showed last time is a file read and a parse (some 150 ms for 1,100 tasks on
+        // a debug build), so it runs off the main thread, started now; it lands well before the
+        // first frame, which waits on the activity. A provider read that lands first wins.
+        val cached = GlanceApp.values().filter { installed.value[it] == true && client.realDataSupported }
+        if (cached.isNotEmpty()) scope.launch {
+            val today = LocalDate.now(clock)
+            val snapshots = withContext(io) {
+                cached.associateWith { app ->
+                    cache.load(app)?.let { rows ->
+                        when (app) {
+                            GlanceApp.DAYGLANCE -> SnapshotParser.dayGlance(rows, today)
+                            GlanceApp.LASTGLANCE -> SnapshotParser.lastGlance(rows, today)
+                        }
+                    }
+                }
+            }
+            for ((app, snapshot) in snapshots) {
+                if (snapshot == null || app in read) continue
+                when (app) {
+                    GlanceApp.DAYGLANCE -> day.value = snapshot as DayGlanceSnapshot
+                    GlanceApp.LASTGLANCE -> last.value = snapshot as LastGlanceSnapshot
+                }
+            }
+            recompute()
+        }
         // Demo-mode writes go to the fallback, whose flows then move; mirror them.
         for (flow in listOf(fallback.tasks, fallback.goals, fallback.projects, fallback.routines, fallback.frames, fallback.dayShape, fallback.weather, fallback.chores, fallback.people)) {
             scope.launch { flow.collect { recompute() } }
@@ -160,9 +199,11 @@ class ProviderRepository(
         return asked
     }
 
+    /** Both providers at once: each read may have to start its app's process first. */
     suspend fun refreshAll() {
-        refresh(GlanceApp.DAYGLANCE)
-        refresh(GlanceApp.LASTGLANCE)
+        coroutineScope {
+            for (app in GlanceApp.values()) launch { refresh(app) }
+        }
     }
 
     private fun scheduleRefresh(app: GlanceApp) {
@@ -181,6 +222,10 @@ class ProviderRepository(
         val isInstalled = withContext(io) { client.isInstalled(app) }
         installed.value = installed.value + (app to isInstalled)
         val rows = if (client.realDataSupported && isInstalled) withContext(io) { client.read(app) } else null
+        // What the next cold start shows until it reads again; a refused read or a missing app
+        // forgets it, as this read falls back to the demo.
+        withContext(io) { cache.save(app, rows) }
+        read.add(app)
         val reflected: Set<String>
         when (app) {
             GlanceApp.DAYGLANCE -> {

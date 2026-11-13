@@ -5,10 +5,18 @@ import org.junit.Test
 
 class PinnedLayoutTest {
     @Test
-    fun `slots that fit, counting the gaps between them only`() {
-        assertEquals(4, PinnedLayout.fit(274f, 64f, 6f)) // 4*64 + 3*6 = 274
-        assertEquals(3, PinnedLayout.fit(273f, 64f, 6f))
-        assertEquals(1, PinnedLayout.fit(10f, 64f, 6f))
+    fun `slots that fit, each an icon and its minimum gap`() {
+        assertEquals(4, PinnedLayout.fit(256f, 48f, 16f)) // 4 * (48 + 16) = 256
+        assertEquals(3, PinnedLayout.fit(255f, 48f, 16f))
+        assertEquals(1, PinnedLayout.fit(10f, 48f, 16f))
+    }
+
+    @Test
+    fun `the widths the row sees on the test devices`() {
+        // Pixel Tablet, landscape: ~523 dp inside the card, less the 44 dp button.
+        assertEquals(7, PinnedLayout.fit(523f - 44f, 48f, 16f))
+        // A 411 dp phone: ~359 dp inside the card, less the 40 dp button.
+        assertEquals(5, PinnedLayout.fit(359f - 40f, 40f, 16f))
     }
 
     @Test

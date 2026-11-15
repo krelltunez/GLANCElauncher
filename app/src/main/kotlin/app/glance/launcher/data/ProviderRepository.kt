@@ -11,6 +11,8 @@ import app.glance.launcher.data.provider.OutboxStore
 import app.glance.launcher.data.provider.Patch
 import app.glance.launcher.data.provider.SnapshotCache
 import app.glance.launcher.data.provider.SnapshotParser
+import app.glance.launcher.data.provider.ThingGlanceParser
+import app.glance.launcher.data.provider.ThingGlanceSnapshot
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
@@ -61,7 +63,8 @@ class ProviderRepository(
 
     private val day = MutableStateFlow<DayGlanceSnapshot?>(null)
     private val last = MutableStateFlow<LastGlanceSnapshot?>(null)
-    private val installed = MutableStateFlow(mapOf(GlanceApp.DAYGLANCE to false, GlanceApp.LASTGLANCE to false))
+    private val thing = MutableStateFlow<ThingGlanceSnapshot?>(null)
+    private val installed = MutableStateFlow(GlanceApp.values().associateWith { false })
     private val outbox = MutableStateFlow(Outbox.decode(store.load()))
     private val outboxLock = Mutex()
     private val lastSent = HashMap<String, Instant>()
@@ -80,6 +83,7 @@ class ProviderRepository(
     private val _inboxCount = MutableStateFlow(fallback.inboxCount.value)
     private val _chores = MutableStateFlow(fallback.chores.value)
     private val _people = MutableStateFlow(fallback.people.value)
+    private val _thingGlance = MutableStateFlow<ThingGlanceData?>(null)
     private val _availability = MutableStateFlow(Availability(dayGlanceInstalled = false, lastGlanceInstalled = false))
 
     override val tasks: StateFlow<List<Task>> = _tasks.asStateFlow()
@@ -92,6 +96,7 @@ class ProviderRepository(
     override val inboxCount: StateFlow<Int?> = _inboxCount.asStateFlow()
     override val chores: StateFlow<List<Chore>> = _chores.asStateFlow()
     override val people: StateFlow<List<Person>> = _people.asStateFlow()
+    override val thingGlance: StateFlow<ThingGlanceData?> = _thingGlance.asStateFlow()
     override val availability: StateFlow<Availability> = _availability.asStateFlow()
 
     /** The pending writes, for tests and the settings sheet. */
@@ -101,7 +106,7 @@ class ProviderRepository(
     override val refreshRequests: StateFlow<Map<GlanceApp, RefreshRequest>> = _refreshRequests.asStateFlow()
 
     override suspend fun requestRefresh(app: GlanceApp): String? {
-        val live = when (app) { GlanceApp.DAYGLANCE -> dayLive; GlanceApp.LASTGLANCE -> lastLive }
+        val live = when (app) { GlanceApp.DAYGLANCE -> dayLive; GlanceApp.LASTGLANCE -> lastLive; GlanceApp.THINGGLANCE -> thingLive }
         if (!live) return null
         val clientId = UUID.randomUUID().toString()
         _refreshRequests.value = _refreshRequests.value + (app to RefreshRequest(clientId, clock.instant()))
@@ -127,6 +132,7 @@ class ProviderRepository(
                         when (app) {
                             GlanceApp.DAYGLANCE -> SnapshotParser.dayGlance(rows, today)
                             GlanceApp.LASTGLANCE -> SnapshotParser.lastGlance(rows, today)
+                            GlanceApp.THINGGLANCE -> ThingGlanceParser.parse(rows)
                         }
                     }
                 }
@@ -136,12 +142,13 @@ class ProviderRepository(
                 when (app) {
                     GlanceApp.DAYGLANCE -> day.value = snapshot as DayGlanceSnapshot
                     GlanceApp.LASTGLANCE -> last.value = snapshot as LastGlanceSnapshot
+                    GlanceApp.THINGGLANCE -> thing.value = snapshot as ThingGlanceSnapshot
                 }
             }
             recompute()
         }
         // Demo-mode writes go to the fallback, whose flows then move; mirror them.
-        for (flow in listOf(fallback.tasks, fallback.goals, fallback.projects, fallback.routines, fallback.frames, fallback.dayShape, fallback.weather, fallback.chores, fallback.people)) {
+        for (flow in listOf(fallback.tasks, fallback.goals, fallback.projects, fallback.routines, fallback.frames, fallback.dayShape, fallback.weather, fallback.chores, fallback.people, fallback.thingGlance)) {
             scope.launch { flow.collect { recompute() } }
         }
         scope.launch { demoOverride.collect { recompute() } }
@@ -188,15 +195,29 @@ class ProviderRepository(
         val now = clock.instant()
         val asked = ArrayList<GlanceApp>()
         for (app in GlanceApp.values()) {
-            val f = when (app) { GlanceApp.DAYGLANCE -> _availability.value.dayGlanceFreshness; GlanceApp.LASTGLANCE -> _availability.value.lastGlanceFreshness }
-            if (f.source != DataSource.LIVE) continue
-            val synced = f.syncedAt
-            if (synced != null && java.time.Duration.between(synced, now) < REFRESH_THROTTLE) continue
-            val last = _refreshRequests.value[app]
-            if (last != null && java.time.Duration.between(last.sentAt, now) < REFRESH_THROTTLE) continue
-            if (requestRefresh(app) != null) asked.add(app)
+            if (askIfOlderThan(app, app.refreshEvery, now)) asked.add(app)
         }
         return asked
+    }
+
+    /** REFRESH for [app] when it is live, last synced longer ago than [every], and not asked within it. */
+    private suspend fun askIfOlderThan(app: GlanceApp, every: java.time.Duration, now: Instant): Boolean {
+        val f = _availability.value.freshness(app)
+        if (f.source != DataSource.LIVE) return false
+        val synced = f.syncedAt
+        if (synced != null && java.time.Duration.between(synced, now) < every) return false
+        val last = _refreshRequests.value[app]
+        if (last != null && java.time.Duration.between(last.sentAt, now) < every) return false
+        return requestRefresh(app) != null
+    }
+
+    /**
+     * thingGLANCE is asked rarely on a return to Home ([GlanceApp.refreshEvery]: its dates move
+     * by the day), so looking at its page asks again, at most every [PAGE_REFRESH]. The other
+     * two are asked often enough already.
+     */
+    override suspend fun planningShown(app: GlanceApp) {
+        if (app.refreshEvery > PAGE_REFRESH) askIfOlderThan(app, PAGE_REFRESH, clock.instant())
     }
 
     /** Both providers at once: each read may have to start its app's process first. */
@@ -238,6 +259,11 @@ class ProviderRepository(
                 last.value = snapshot
                 reflected = snapshot?.reflected ?: emptySet()
             }
+            GlanceApp.THINGGLANCE -> {
+                val snapshot = rows?.let { ThingGlanceParser.parse(it) }
+                thing.value = snapshot
+                reflected = snapshot?.reflected ?: emptySet()
+            }
         }
         val remaining = outboxLock.withLock {
             val kept = outbox.value.filterNot { e -> e.app == app && (e.clientId in reflected || e.expired(now)) }
@@ -264,6 +290,7 @@ class ProviderRepository(
         val forced = demoOverride.value
         val d = if (forced) null else day.value
         val l = if (forced) null else last.value
+        val t = if (forced) null else thing.value
         val dayPending = pending.filter { it.app == GlanceApp.DAYGLANCE }
         val lastPending = pending.filter { it.app == GlanceApp.LASTGLANCE }
         _tasks.value = if (d != null) Outbox.applyToTasks(d.tasks, dayPending) else fallback.tasks.value
@@ -277,6 +304,13 @@ class ProviderRepository(
         _inboxCount.value = if (d != null) d.meta.inboxCount else null
         _chores.value = if (l != null) Outbox.applyToChores(l.chores, lastPending) else fallback.chores.value
         _people.value = if (l != null) Outbox.applyToPeople(l.people, lastPending) else fallback.people.value
+        // No demo for a missing thingGLANCE, only for the screenshot demo: without the app there is no page.
+        _thingGlance.value = when {
+            forced -> fallback.thingGlance.value
+            t != null -> Outbox.applyToThings(t.data, pending.filter { it.app == GlanceApp.THINGGLANCE })
+            else -> null
+        }
+        val thingInstalled = installed.value[GlanceApp.THINGGLANCE] == true
         val dayInstalled = installed.value[GlanceApp.DAYGLANCE] == true
         val lastInstalled = installed.value[GlanceApp.LASTGLANCE] == true
         _availability.value = Availability(
@@ -288,6 +322,9 @@ class ProviderRepository(
             lastGlanceUpdatedAt = l?.updatedAt,
             dayGlanceFreshness = freshness(d != null, dayInstalled, d?.updatedAt, d?.meta),
             lastGlanceFreshness = freshness(l != null, lastInstalled, l?.updatedAt, l?.meta),
+            thingGlanceInstalled = thingInstalled,
+            thingGlance = if (t != null) DataSource.LIVE else DataSource.DEMO,
+            thingGlanceFreshness = freshness(t != null, thingInstalled, t?.updatedAt, t?.meta),
             demoForced = forced,
         )
     }
@@ -300,6 +337,7 @@ class ProviderRepository(
 
     private val dayLive: Boolean get() = day.value != null && !demoOverride.value
     private val lastLive: Boolean get() = last.value != null && !demoOverride.value
+    private val thingLive: Boolean get() = thing.value != null && !demoOverride.value
 
     private suspend fun enqueue(app: GlanceApp, action: String, payload: JSONObject, patch: Patch, clientId: String = UUID.randomUUID().toString()) {
         val entry = OutboxEntry(clientId, app, app.action(action), payload.toString(), clock.instant(), patch)
@@ -401,6 +439,22 @@ class ProviderRepository(
         enqueue(GlanceApp.LASTGLANCE, "LOG_INTERACTION", JSONObject().put("person_id", personId), Patch.LogInteraction(personId, now))
     }
 
+    override suspend fun decideThingDate(event: ThingEvent) {
+        if (!thingLive) return fallback.decideThingDate(event)
+        enqueue(GlanceApp.THINGGLANCE, "DECIDE", JSONObject().put("event_key", event.key).put("state", "done"), Patch.DecideThing(event.key))
+    }
+
+    override suspend fun restoreThingDate(event: ThingEvent) {
+        if (!thingLive) return fallback.restoreThingDate(event)
+        enqueue(GlanceApp.THINGGLANCE, "DECIDE", JSONObject().put("event_key", event.key).put("state", "restore"), Patch.RestoreThing(event))
+    }
+
+    override suspend fun sendThingDate(event: ThingEvent) {
+        if (!thingLive) return fallback.sendThingDate(event)
+        if (event.sent || _thingGlance.value?.canSend != true) return
+        enqueue(GlanceApp.THINGGLANCE, "SEND", JSONObject().put("event_key", event.key), Patch.SendThing(event.key))
+    }
+
     // endregion
 
     companion object {
@@ -408,5 +462,7 @@ class ProviderRepository(
         const val RESEND_SECONDS = 15L
         /** At most one REFRESH per app per this long, and none when the app synced within it. */
         val REFRESH_THROTTLE: java.time.Duration = java.time.Duration.ofMinutes(2)
+        /** How often looking at a planning page may ask its app again (thingGLANCE only; see [planningShown]). */
+        val PAGE_REFRESH: java.time.Duration = java.time.Duration.ofMinutes(10)
     }
 }

@@ -9,15 +9,32 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import java.time.Duration
 
-/** The two apps, with the authority each serves its launcher snapshot on and the receiver that takes writes. */
-enum class GlanceApp(val packageName: String, val authority: String, val receiver: String, val collections: List<String>) {
+/**
+ * The apps, with the authority each serves its launcher snapshot on and the receiver that takes
+ * writes. [refreshEvery] is how often a return to the launcher asks the app to confirm its data,
+ * and [staleAfter] how old a confirmation may be before the app is called out as stale: a day
+ * planner's and a chore list's data moves by the minute, thingGLANCE's by the day (D81).
+ */
+enum class GlanceApp(
+    val packageName: String,
+    val authority: String,
+    val receiver: String,
+    val collections: List<String>,
+    val refreshEvery: Duration = Duration.ofMinutes(2),
+    val staleAfter: Duration = Duration.ofHours(1),
+) {
     DAYGLANCE("com.dayglance.app", "com.dayglance.app.launcher", "com.dayglance.app.launcher.LauncherIntentReceiver",
         // Every collection SnapshotParser.dayGlance reads: one left out here is never queried, and
         // its part of the launcher stays empty with nothing failing (the weather ring did).
         listOf("meta", "tasks", "goals", "projects", "routines", "frames", "dayShape", "weather")),
     LASTGLANCE("com.lastglance.app", "com.lastglance.app.launcher", "com.lastglance.app.launcher.LauncherIntentReceiver",
-        listOf("meta", "chores", "people"));
+        listOf("meta", "chores", "people")),
+    THINGGLANCE("com.thingglance.app", "com.thingglance.app.launcher", "com.thingglance.app.launcher.LauncherIntentReceiver",
+        // Every collection ThingGlanceParser reads (thingGLANCE's docs/launcher.md).
+        listOf("meta", "attention", "upcoming", "things", "charges"),
+        refreshEvery = Duration.ofHours(3), staleAfter = Duration.ofHours(24));
 
     /** `com.dayglance.app.launcher.COMPLETE` and the like. */
     fun action(name: String): String = "$authority.$name"

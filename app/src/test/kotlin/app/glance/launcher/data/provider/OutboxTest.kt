@@ -100,6 +100,38 @@ class OutboxTest {
     }
 
     @Test
+    fun `thingGLANCE's writes show at once, and survive a restart`() {
+        fun event(key: String, days: Long, state: String = "open") =
+            app.glance.launcher.data.ThingEvent(key, "renewal", today.plusDays(days), "soon", "Plan renews", "Subscription", 9.99, state, "thingglance://event/$key")
+        val a = event("a", 3)
+        val b = event("b", 9)
+        val data = app.glance.launcher.data.ThingGlanceData(
+            hasData = true, builtFor = today, counts = app.glance.launcher.data.ThingCounts(attention = 2), attention = listOf(a, b), upcoming = listOf(a, b), canSend = true,
+        )
+        val thing = GlanceApp.THINGGLANCE
+        val done = Outbox.applyToThings(data, listOf(entry(Patch.DecideThing("a"), thing, "w1")))
+        assertEquals(listOf("b"), done.attention.map { it.key })
+        assertEquals(1, done.counts.attention)
+        // Still listed ahead, as the app lists it, with where its decision stands.
+        assertEquals("done", done.upcoming.first { it.key == "a" }.state)
+        val sent = Outbox.applyToThings(data, listOf(entry(Patch.SendThing("b"), thing, "w2")))
+        assertTrue(sent.attention.first { it.key == "b" }.sent)
+        assertEquals(2, sent.counts.attention)
+        // Cleared and put back before the app has seen either: back in date order, and counted once.
+        val both = listOf(entry(Patch.DecideThing("a"), thing, "w1"), entry(Patch.RestoreThing(a), thing, "w3"))
+        val back = Outbox.applyToThings(data, both)
+        assertEquals(listOf("a", "b"), back.attention.map { it.key })
+        assertEquals(2, back.counts.attention)
+        // Restoring a date the snapshot no longer lists brings the whole date back.
+        val gone = data.copy(attention = listOf(b), counts = data.counts.copy(attention = 1))
+        assertEquals(listOf("a", "b"), Outbox.applyToThings(gone, listOf(entry(Patch.RestoreThing(a), thing, "w3"))).attention.map { it.key })
+        // Another app's writes are nothing to thingGLANCE's copy, and all three patches round-trip.
+        assertEquals(data, Outbox.applyToThings(data, listOf(entry(Patch.LogChore("c1", now), GlanceApp.LASTGLANCE))))
+        val entries = both + entry(Patch.SendThing("b"), thing, "w2")
+        assertEquals(entries, Outbox.decode(Outbox.encode(entries)))
+    }
+
+    @Test
     fun `an entry expires after a day`() {
         assertFalse(entry(Patch.CompleteTask("t", now), createdAt = now.minus(Duration.ofHours(23))).expired(now))
         assertTrue(entry(Patch.CompleteTask("t", now), createdAt = now.minus(Duration.ofHours(25))).expired(now))

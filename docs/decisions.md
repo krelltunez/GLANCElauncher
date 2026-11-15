@@ -780,3 +780,94 @@ entries by number, so the numbers never change. Files and pull requests named "i
     debug build) and lands before the first frame; a provider read that lands first wins. A
     missing app or a refused read forgets its rows, as that read already showed the demo. The two
     providers are now read at the same time.
+80. **A planning page per app.** Planning was one screen for both apps: in portrait a single
+    column that ran dayGLANCE's month, agenda, goals and projects and then all of lastGLANCE,
+    which on a phone put chores and people several screens down, behind a "lastGLANCE" jump
+    chip; in landscape a column per app, so each app had half the width however much it had to
+    show. It also left no room for another app. Each app now has its own page, left of Home:
+    dayGLANCE's one swipe away and lastGLANCE's a second. Home is still the rightmost page, the
+    start page, and where the Home button and Back return. This revises decision 17's two
+    pages, and decision 26's jump to lastGLANCE goes, since that section is no longer in the
+    column: the Goals and Projects chips, their up arrows and the Back to top row stay wherever
+    what they jump to is in the same scrolling column.
+
+    A page is one app only. Its header has the app's wordmark, "planning", and that app's data
+    status alone, in Settings' words ("demo data", "last confirmed 3h ago", else "live");
+    long-press still opens diagnostics. In tablet landscape the header runs across the top
+    and the page splits in two columns under it, each scrolling on its own: month and agenda
+    beside Goals and Projects, and chores (Pinned, Due) beside people (Coming up, Reach out).
+    There the Goals and Projects chips and arrows are left out, since both sections are in view
+    beside the agenda. The "+" adds what the page is about, in the page's colour: on
+    dayGLANCE's a tap opens the task sheet at once, on lastGLANCE's it offers a chore or a
+    person. Its sheet now closes on Back and on Home, like the other overlays.
+
+    Home's header icons go to their app's planning page rather than opening the app, which
+    revises decision 45: with two pages to the left of Home the icons are the direct way to
+    either, and the page says in words what the icon's amber dot can only hint at. Opening the
+    app moved one tap on, to the wordmark in the page's header. Long-press is still diagnostics.
+
+    A small pill at the foot of the pager says which page is in front: a dot per planning page
+    in the app's colour, in the order the pages sit, the one in front filled, and a tap on a dot
+    goes there. Home has no dot; the pill fades out with the swipe towards Home and is not there
+    at all on it. Columns end with enough blank foot to scroll clear of it and of the "+", so
+    the last row of a page can always be read and tapped, and the toast rides above the pill
+    on a planning page.
+
+    The order lives in `PlanningPages`, pure and tested, because the list of apps can change
+    while the launcher runs and the pager must not move when it does. Pager indices count away
+    from Home (Home 0, dayGLANCE 1, lastGLANCE 2) and the pager is laid out in reverse, so an
+    app joining the end of the list takes a new index and nothing already there, Home least of
+    all, gets a different one. Each page also has a key, which the pager follows if the list
+    changes nearer Home than the page in front. Checked on a phone-sized emulator (the pager,
+    the pill and its dots, the header icons, a page joining at the end); tablet landscape has
+    been built with the compiler only.
+
+81. **thingGLANCE is the third app, and an optional one.** thingGLANCE (things that carry
+    dates: warranties, plans, support windows) serves the same contract as the other two
+    (its `docs/launcher.md`): a provider behind `com.thingglance.permission.LAUNCHER`, which
+    trusts this launcher's release certificate, a receiver for writes and `REFRESH`, and a
+    `meta` row in the field names `SnapshotParser.appMeta` already reads. So it is one more
+    `GlanceApp`, read, cached, observed and refreshed by the code that was there, with its own
+    parser (`ThingGlanceParser`) for the rest of its rows.
+
+    It differs from the other two in three ways, each on purpose.
+
+    It is not required. dayGLANCE and lastGLANCE are what the launcher is for, and a missing
+    one shows demo data under a banner that asks for it. thingGLANCE is a paid app: a demo
+    page for it would be an advertisement three swipes into someone's home screen. So its
+    planning page exists only while its own data can be read (`PlanningPages.apps`), it has no
+    banner, and Settings and diagnostics list it only when it is installed. Its repository
+    flow is null without it. The one exception is the screenshot demo (debug builds), which
+    shows a seeded page. It is the last of the list, so the page comes and goes without Home
+    or either other page moving (decision 80).
+
+    It is asked to refresh rarely. The other two are asked on every return to Home, at most
+    every two minutes, and called stale after an hour: a day planner's data moves by the
+    minute. thingGLANCE's dates move by the day, and each `REFRESH` at a closed app costs a
+    background run of its web bundle. `GlanceApp` now carries `refreshEvery` and `staleAfter`
+    per app: three hours and a day for thingGLANCE. Looking at its page asks again, at most
+    every ten minutes (`planningShown`), which is when fresh data is worth having.
+
+    Its page is the app's own screen, not a summary. As with SCHED (decision 24) and the
+    chore rows (decision 10), the page is a port of the app's Glance view, section for
+    section: the headline panel with its four figures and the twelve-month strip, "Needs a
+    decision", the Fleet with its life rings and bars, and plan charges month by month. The
+    T-minus badge, the tones and the wording rules are ports of the app's (`ThingGlance`,
+    tested against what the app writes). Surfaces and text are the launcher's, so the three
+    pages sit together; the sky blue and the tone colours are thingGLANCE's, light and dark.
+    Every word on a date is the app's own (`title`, `detail`); the headings are the app's
+    English. Countdowns and the rings are worked out from each date, so they are right at
+    midnight with the app closed.
+
+    Two writes: "Done with this" (`DECIDE`) and "Send to dayGLANCE" (`SEND`, offered only
+    when the app says it is connected). A cleared date can be put back from "Recently
+    cleared" (`DECIDE` with `state: restore`), as in the app; that list is the launcher's own
+    and lasts until it restarts. The outbox patches (`DecideThing`, `RestoreThing`,
+    `SendThing`) keep each change in view until thingGLANCE's handled list shows the write.
+    The "+" opens the app's own add form: a thing made from a name alone has no dates.
+
+    Checked on an emulator with a launcher build carrying the release key: the page from the
+    app's sample data, Done, Restore, a `REFRESH` at a closed app (a background run, 11 s
+    cold), at a live one, and a write to a backgrounded app whose page had stopped answering
+    (thingGLANCE closed the page and applied it from a background run). Not checked: Send to
+    dayGLANCE (needs a vault and both apps connected), a tablet, a real phone's battery rules.

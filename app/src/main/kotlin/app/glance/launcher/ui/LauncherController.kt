@@ -12,10 +12,13 @@ import app.glance.launcher.data.Frame
 import app.glance.launcher.data.Routine
 import app.glance.launcher.data.Task
 import app.glance.launcher.data.TaskDraft
+import app.glance.launcher.data.ThingEvent
+import app.glance.launcher.data.provider.GlanceApp
 import app.glance.launcher.di.AppGraph
 import app.glance.launcher.prefs.SchedViewPrefs
 import app.glance.launcher.system.DoubleTapLock
 import app.glance.launcher.system.LockScreenService
+import app.glance.launcher.ui.planning.QuickAddKind
 import app.glance.launcher.ui.planning.SchedAgenda
 import app.glance.launcher.ui.planning.SchedFilters
 import app.glance.launcher.ui.search.CaptureTarget
@@ -53,8 +56,20 @@ class LauncherController(val graph: AppGraph, private val scope: CoroutineScope)
     var pinnedEditorOpen by mutableStateOf(false)
     /** The long-press menu of a pinned app or shortcut on Home ([app.glance.launcher.ui.common.AppMenu]). */
     var appMenuFor by mutableStateOf<app.glance.launcher.apps.Pin?>(null)
-    /** Bumped to ask the root to scroll to the planning page. */
+    /**
+     * Bumped to ask the root to scroll to [planningTarget]'s planning page ([showPlanning]). A
+     * counter rather than the app alone, so asking for the same page twice scrolls twice.
+     */
     var planningRequests by mutableStateOf(0)
+        private set
+    var planningTarget = GlanceApp.DAYGLANCE
+        private set
+    /**
+     * The quick-add sheet a planning page's "+" opened, if any. The page that owns the kind draws
+     * it; it is held here so the root can take the page indicator out from under it, and so Home
+     * and Back close it with the other overlays.
+     */
+    var quickAdd by mutableStateOf<QuickAddKind?>(null)
     /** Set by the mic on Home: the search overlay it opens starts listening (once) instead of showing the keyboard. */
     var voiceStartPending by mutableStateOf(false)
 
@@ -114,12 +129,17 @@ class LauncherController(val graph: AppGraph, private val scope: CoroutineScope)
         pinnedEditorOpen = false
         appMenuFor = null
         schedFiltersOpen = false
+        quickAdd = null
         searchQuery = ""
         searchActive = false
         voiceStartPending = false
     }
 
-    fun showPlanning() { planningRequests++ }
+    /** Scroll to [app]'s planning page (Home's header icons). Nothing happens when the app has no page. */
+    fun showPlanning(app: GlanceApp) {
+        planningTarget = app
+        planningRequests++
+    }
 
     fun openDrawer(pick: PickMode? = null) {
         drawerPickMode = pick
@@ -185,6 +205,28 @@ class LauncherController(val graph: AppGraph, private val scope: CoroutineScope)
     fun addChore(name: String) = scope.launch {
         repository.addChore(name)
         toast = "Added to lastGLANCE: $name"
+    }
+
+    // thingGLANCE's page: the app's own three actions on a date (its `useEventActions`).
+
+    /** Dates cleared from the page since the launcher started, newest first: its "Recently cleared", each with a way back. */
+    var thingCleared by mutableStateOf<List<ThingEvent>>(emptyList())
+        private set
+
+    fun thingDone(event: ThingEvent) = scope.launch {
+        repository.decideThingDate(event)
+        thingCleared = (listOf(event) + thingCleared.filterNot { it.key == event.key }).take(4)
+        toast = "Cleared from your queue"
+    }
+
+    fun thingRestore(event: ThingEvent) = scope.launch {
+        repository.restoreThingDate(event)
+        thingCleared = thingCleared.filterNot { it.key == event.key }
+    }
+
+    fun thingSend(event: ThingEvent) = scope.launch {
+        repository.sendThingDate(event)
+        toast = "Sent to dayGLANCE"
     }
 
     fun logInteraction(personId: String, name: String) = scope.launch {

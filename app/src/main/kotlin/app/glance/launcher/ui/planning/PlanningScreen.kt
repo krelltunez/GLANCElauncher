@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -39,7 +40,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -59,6 +59,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -74,6 +75,7 @@ import app.glance.launcher.data.Person
 import app.glance.launcher.data.ProgressMath
 import app.glance.launcher.data.Project
 import app.glance.launcher.data.Task
+import app.glance.launcher.data.provider.GlanceApp
 import app.glance.launcher.intents.GlanceIntents
 import app.glance.launcher.ui.GlanceIcons
 import app.glance.launcher.ui.LauncherController
@@ -81,6 +83,7 @@ import app.glance.launcher.ui.common.DayCell
 import app.glance.launcher.ui.common.DataStatusLabel
 import app.glance.launcher.ui.common.GlanceCard
 import app.glance.launcher.ui.common.LastGlanceWordmark
+import app.glance.launcher.ui.common.ThingGlanceWordmark
 import app.glance.launcher.ui.common.LucideIcon
 import app.glance.launcher.ui.common.ProgressBar
 import app.glance.launcher.ui.common.SectionHeader
@@ -101,104 +104,222 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 /**
- * The planning screen: month with agenda, goal and project progress, and lastGLANCE's
- * overdue and due-soon items plus People recency. Fixed layout; taps deep-link into the apps.
+ * One app's planning page (D80): dayGLANCE's month, agenda, goals and projects, or lastGLANCE's
+ * chores and people. Fixed layout; taps deep-link into the app. The pages sit left of Home in
+ * [PlanningPages]' order, and each is laid out by the same frame ([PageFrame], [OneColumn],
+ * [TwoColumns]), so a page is only its sections.
  */
 @Composable
-fun PlanningScreen(controller: LauncherController, modifier: Modifier = Modifier) {
-    val c = GlanceTheme.colors
+fun PlanningPage(app: GlanceApp, controller: LauncherController, modifier: Modifier = Modifier) = when (app) {
+    GlanceApp.DAYGLANCE -> DayGlancePage(controller, modifier)
+    GlanceApp.LASTGLANCE -> LastGlancePage(controller, modifier)
+    GlanceApp.THINGGLANCE -> ThingGlancePage(controller, modifier)
+}
+
+/** Month and agenda, then Goals and Projects: below them in one column, beside them in tablet landscape. */
+@Composable
+private fun DayGlancePage(controller: LauncherController, modifier: Modifier) {
     val repo = controller.repository
     val tasks by repo.tasks.collectAsState()
     val goals by repo.goals.collectAsState()
     val projects by repo.projects.collectAsState()
     val routines by repo.routines.collectAsState()
-    val chores by repo.chores.collectAsState()
-    val people by repo.people.collectAsState()
     val shape by repo.dayShape.collectAsState()
     val clockOverride by controller.graph.prefs.use24HourClock.collectAsState()
-    val dockEnabled by controller.graph.prefs.dockEnabled.collectAsState()
     val use24 = clockOverride ?: shape.use24HourClock
-
-    var quickAdd by remember { mutableStateOf<QuickAddKind?>(null) }
-    BoxWithConstraints(modifier.background(c.background).topBarsPadding()) {
-        val landscape = maxWidth > maxHeight
+    PageFrame(GlanceApp.DAYGLANCE, controller, modifier) { landscape, compact ->
+        val jumps = rememberColumnJumps()
         // Phone widths: the month's cells go taller than square, since a seventh of the column is
         // only ~42 dp and the bands need the height more than the width.
-        val compact = maxWidth < 600.dp
-        val bottom: @Composable () -> Unit = { if (!dockEnabled) Spacer(Modifier.navigationBarsPadding()) }
+        val cellAspect = if (compact) 0.7f else 1f
         if (landscape) {
-            // One column per app, each scrolling on its own.
-            Row(Modifier.fillMaxSize().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
-                val jumps = rememberColumnJumps()
-                Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(jumps.scroll).padding(vertical = 8.dp)) {
-                    PlanningHeader("planning", controller)
-                    MonthSection(controller, tasks, routines, projects, use24, SchedJumps(jumps::toGoals, jumps::toProjects), cellAspect = if (compact) 0.7f else 1f)
-                    Spacer(Modifier.height(20.dp))
-                    Column(Modifier.onGloballyPositioned { jumps.goalsY = it.positionInParent().y }) { GoalsSection(goals, projects, tasks, jumps) }
-                    Spacer(Modifier.height(20.dp))
-                    Column(Modifier.onGloballyPositioned { jumps.projectsY = it.positionInParent().y }) { ProjectsSection(projects, tasks, jumps, columns = 2) }
+            // Goals and Projects are the other column, in view beside the agenda: nothing to jump
+            // to, so no chips and no up arrows. The agenda still runs long, and keeps its way back.
+            TwoColumns(
+                GlanceApp.DAYGLANCE, controller, jumps.scroll,
+                left = {
+                    MonthSection(controller, tasks, routines, projects, use24, jumps = null, cellAspect = cellAspect)
                     Spacer(Modifier.height(16.dp))
                     BackToTopRow(jumps)
-                    Spacer(Modifier.height(24.dp))
-                    bottom()
-                }
-                Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(vertical = 8.dp)) {
-                    Spacer(Modifier.height(8.dp))
-                    LastGlanceSection(controller, chores, people, jumps = null)
-                    Spacer(Modifier.height(24.dp))
-                    bottom()
-                }
-            }
+                },
+                right = {
+                    Spacer(Modifier.height(4.dp))
+                    GoalsSection(goals, projects, tasks, jumps = null)
+                    Spacer(Modifier.height(20.dp))
+                    ProjectsSection(projects, tasks, jumps = null, columns = 2)
+                },
+            )
         } else {
-            val jumps = rememberColumnJumps()
-            // As on the phone Home: the top inset is breathing room enough, and the 8 dp only tops it up.
-            val topInset = with(LocalDensity.current) { WindowInsets.statusBars.union(WindowInsets.displayCutout).getTop(this).toDp() }
-            Column(
-                Modifier.fillMaxSize().verticalScroll(jumps.scroll)
-                    .padding(start = 16.dp, end = 16.dp, top = if (compact) (8.dp - topInset).coerceAtLeast(0.dp) else 8.dp, bottom = 8.dp),
-            ) {
-                PlanningHeader("planning", controller)
-                MonthSection(
-                    controller, tasks, routines, projects, use24,
-                    SchedJumps(jumps::toGoals, jumps::toProjects, toLastGlance = jumps::toLastGlance, compact = compact),
-                    cellAspect = if (compact) 0.7f else 1f,
-                )
+            OneColumn(GlanceApp.DAYGLANCE, controller, compact, jumps.scroll) {
+                MonthSection(controller, tasks, routines, projects, use24, SchedJumps(jumps::toGoals, jumps::toProjects, compact = compact), cellAspect = cellAspect)
                 Spacer(Modifier.height(20.dp))
                 Column(Modifier.onGloballyPositioned { jumps.goalsY = it.positionInParent().y }) { GoalsSection(goals, projects, tasks, jumps) }
                 Spacer(Modifier.height(20.dp))
                 Column(Modifier.onGloballyPositioned { jumps.projectsY = it.positionInParent().y }) { ProjectsSection(projects, tasks, jumps, columns = if (compact) 1 else 2) }
-                Spacer(Modifier.height(20.dp))
-                Column(Modifier.onGloballyPositioned { jumps.lastGlanceY = it.positionInParent().y }) { LastGlanceSection(controller, chores, people, jumps, compact = compact) }
                 Spacer(Modifier.height(16.dp))
                 BackToTopRow(jumps)
-                Spacer(Modifier.height(24.dp))
-                bottom()
             }
         }
-        // Quick add, over everything on every size: tasks, chores and people (QuickAdd.kt).
-        QuickAddButton(
-            controller, onPick = { quickAdd = it },
-            modifier = Modifier.align(Alignment.BottomEnd).then(if (dockEnabled) Modifier else Modifier.navigationBarsPadding()).padding(16.dp),
-        )
-        quickAdd?.let { kind -> QuickAddSheet(controller, kind, onDismiss = { quickAdd = null }) }
     }
 }
+
+/** Chores (Pinned, Due), then people (Coming up, Reach out): below them in one column, beside them in tablet landscape. */
+@Composable
+private fun LastGlancePage(controller: LauncherController, modifier: Modifier) {
+    val chores by controller.repository.chores.collectAsState()
+    val people by controller.repository.people.collectAsState()
+    PageFrame(GlanceApp.LASTGLANCE, controller, modifier) { landscape, compact ->
+        val jumps = rememberColumnJumps()
+        if (landscape) {
+            TwoColumns(
+                GlanceApp.LASTGLANCE, controller, jumps.scroll,
+                left = {
+                    Spacer(Modifier.height(4.dp))
+                    ChoresSection(controller, chores)
+                },
+                right = {
+                    Spacer(Modifier.height(4.dp))
+                    PeopleSection(controller, people, compact)
+                },
+            )
+        } else {
+            OneColumn(GlanceApp.LASTGLANCE, controller, compact, jumps.scroll) {
+                Spacer(Modifier.height(4.dp))
+                ChoresSection(controller, chores)
+                Spacer(Modifier.height(16.dp))
+                PeopleSection(controller, people, compact)
+                Spacer(Modifier.height(16.dp))
+                BackToTopRow(jumps)
+            }
+        }
+    }
+}
+
+// region the frame every page shares
+
+/**
+ * What every planning page has around its sections: the background, the top inset, the window
+ * class its layout turns on ([content] is told whether it is `landscape` and whether it is
+ * `compact`, a phone's width), and over them the page's "+" with the sheet it opens.
+ */
+@Composable
+internal fun PageFrame(app: GlanceApp, controller: LauncherController, modifier: Modifier, content: @Composable (landscape: Boolean, compact: Boolean) -> Unit) {
+    val c = GlanceTheme.colors
+    val dockEnabled by controller.graph.prefs.dockEnabled.collectAsState()
+    BoxWithConstraints(modifier.background(c.background).topBarsPadding()) {
+        content(maxWidth > maxHeight, maxWidth < 600.dp)
+        // Quick add, over everything on every size, for what this page is about (QuickAdd.kt).
+        QuickAddButton(
+            app, controller, onPick = { controller.quickAdd = it },
+            modifier = Modifier.align(Alignment.BottomEnd).then(if (dockEnabled) Modifier else Modifier.navigationBarsPadding()).padding(16.dp),
+        )
+        // The sheet's state is the controller's, and the neighbouring page is composed too
+        // (beyondViewportPageCount): only the page the kind belongs to draws it.
+        controller.quickAdd?.takeIf { it.app == app }?.let { kind -> QuickAddSheet(controller, kind, onDismiss = { controller.quickAdd = null }) }
+    }
+}
+
+/** Tablet portrait and phone: the header and the page's sections in one scrolling column. */
+@Composable
+internal fun OneColumn(app: GlanceApp, controller: LauncherController, compact: Boolean, scroll: ScrollState, content: @Composable ColumnScope.() -> Unit) {
+    // As on the phone Home: the top inset is breathing room enough, and the 8 dp only tops it up.
+    val topInset = with(LocalDensity.current) { WindowInsets.statusBars.union(WindowInsets.displayCutout).getTop(this).toDp() }
+    Column(
+        Modifier.fillMaxSize().verticalScroll(scroll)
+            .padding(start = 16.dp, end = 16.dp, top = if (compact) (8.dp - topInset).coerceAtLeast(0.dp) else 8.dp, bottom = 8.dp),
+    ) {
+        PlanningHeader(app, controller)
+        content()
+        ColumnFoot(controller)
+    }
+}
+
+/**
+ * Tablet landscape: the header across the top, then two columns that scroll on their own, so
+ * both start at one height and the header stays put. [leftScroll] is the left column's, for its
+ * Back to top row.
+ */
+@Composable
+internal fun TwoColumns(
+    app: GlanceApp,
+    controller: LauncherController,
+    leftScroll: ScrollState,
+    left: @Composable ColumnScope.() -> Unit,
+    right: @Composable ColumnScope.() -> Unit,
+) {
+    Column(Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, top = 8.dp)) {
+        PlanningHeader(app, controller)
+        Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+            Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(leftScroll).padding(bottom = 8.dp)) {
+                left()
+                ColumnFoot(controller)
+            }
+            Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(bottom = 8.dp)) {
+                right()
+                ColumnFoot(controller)
+            }
+        }
+    }
+}
+
+/**
+ * What ends every column: room for its last row to scroll clear of the "+" and the page
+ * indicator, which float over the page, and of the navigation bar where there is no taskbar
+ * above it.
+ */
+@Composable
+private fun ColumnFoot(controller: LauncherController) {
+    val dockEnabled by controller.graph.prefs.dockEnabled.collectAsState()
+    Spacer(Modifier.height(PageFootReserve))
+    if (!dockEnabled) Spacer(Modifier.navigationBarsPadding())
+}
+
+/**
+ * A page's header: the app's wordmark, which opens the app (Home's header icons come here
+ * instead, D80), "planning", and that app's own data status, long-pressed for diagnostics.
+ */
+@Composable
+private fun PlanningHeader(app: GlanceApp, controller: LauncherController) {
+    val c = GlanceTheme.colors
+    val context = LocalContext.current
+    val availability by controller.repository.availability.collectAsState()
+    // No padding above the text, like Home's header, so the wordmarks land at one height.
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
+        Box(Modifier.clickable(onClickLabel = "Open ${PlanningPages.name(app)}", role = Role.Button) {
+            when (app) {
+                GlanceApp.DAYGLANCE -> GlanceIntents.launchDayGlance(context)
+                GlanceApp.LASTGLANCE -> GlanceIntents.launchLastGlance(context)
+                GlanceApp.THINGGLANCE -> GlanceIntents.launchThingGlance(context)
+            }
+        }) {
+            when (app) {
+                GlanceApp.DAYGLANCE -> Wordmark("day", size = 20.dp)
+                GlanceApp.LASTGLANCE -> LastGlanceWordmark(size = 18.dp)
+                GlanceApp.THINGGLANCE -> ThingGlanceWordmark(size = 18.dp)
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        Text("planning", color = c.textMuted, fontSize = 13.sp)
+        Spacer(Modifier.width(10.dp))
+        DataStatusLabel(availability, app, Instant.now(), onLongPress = { controller.diagnosticsOpen = true })
+    }
+}
+
+// endregion
 
 // region jumps within the column
 
 /**
- * The left column is one scrolling Column; the Goals and Projects sections report where they
- * sit in it, and the agenda's jump buttons, the headers' up arrows and the Back to top row
- * animate the scroll there. Positions are content coordinates, which the scroll offset does not
- * move, so they stay right while the user scrolls.
+ * A page's one column, or the left of its two, scrolls as a whole; where Goals and Projects
+ * follow the agenda in it they report where they sit, and the agenda's jump buttons, the
+ * headers' up arrows and the Back to top row animate the scroll there. Positions are content
+ * coordinates, which the scroll offset does not move, so they stay right while the user scrolls.
  */
 class ColumnJumps(val scroll: ScrollState, private val scope: CoroutineScope) {
     var goalsY by mutableFloatStateOf(0f)
     var projectsY by mutableFloatStateOf(0f)
-    var lastGlanceY by mutableFloatStateOf(0f)
     fun toGoals() { scope.launch { scroll.animateScrollTo(goalsY.roundToInt()) } }
     fun toProjects() { scope.launch { scroll.animateScrollTo(projectsY.roundToInt()) } }
-    fun toLastGlance() { scope.launch { scroll.animateScrollTo(lastGlanceY.roundToInt()) } }
     fun toTop() { scope.launch { scroll.animateScrollTo(0) } }
 }
 
@@ -239,24 +360,10 @@ private fun BackToTopRow(jumps: ColumnJumps) {
 
 // endregion
 
-@Composable
-private fun PlanningHeader(suffix: String, controller: LauncherController) {
-    val c = GlanceTheme.colors
-    val availability by controller.repository.availability.collectAsState()
-    // No padding above the text, like Home's header, so the two wordmarks land at one height.
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
-        Wordmark("day", size = 20.dp)
-        Spacer(Modifier.width(8.dp))
-        Text(suffix, color = c.textMuted, fontSize = 13.sp)
-        Spacer(Modifier.width(10.dp))
-        DataStatusLabel(availability, java.time.Instant.now(), onLongPress = { controller.diagnosticsOpen = true })
-    }
-}
-
 // region month + agenda
 
 @Composable
-private fun MonthSection(controller: LauncherController, tasks: List<Task>, routines: List<app.glance.launcher.data.Routine>, projects: List<Project>, use24: Boolean, jumps: SchedJumps, cellAspect: Float = 1f) {
+private fun MonthSection(controller: LauncherController, tasks: List<Task>, routines: List<app.glance.launcher.data.Routine>, projects: List<Project>, use24: Boolean, jumps: SchedJumps?, cellAspect: Float = 1f) {
     val c = GlanceTheme.colors
     val context = LocalContext.current
     val locale = Locale.getDefault()
@@ -323,13 +430,16 @@ private fun MonthSection(controller: LauncherController, tasks: List<Task>, rout
 
 // region goals + projects
 
+/** [jumps] where Goals follows the agenda in one column, for the up arrow back; null where it heads its own. */
 @Composable
-private fun GoalsSection(goals: List<Goal>, projects: List<Project>, tasks: List<Task>, jumps: ColumnJumps) {
+private fun GoalsSection(goals: List<Goal>, projects: List<Project>, tasks: List<Task>, jumps: ColumnJumps?) {
     val c = GlanceTheme.colors
     val context = LocalContext.current
     SectionHeader("Goals") {
-        TopArrow(jumps)
-        Spacer(Modifier.width(12.dp))
+        if (jumps != null) {
+            TopArrow(jumps)
+            Spacer(Modifier.width(12.dp))
+        }
         Text("Goals", color = c.accent, fontSize = 11.sp, modifier = Modifier.clickable { GlanceIntents.openGoalsPanel(context) })
     }
     Spacer(Modifier.height(8.dp))
@@ -391,12 +501,14 @@ private fun TargetDateText(target: LocalDate, today: LocalDate, modifier: Modifi
 }
 
 @Composable
-private fun ProjectsSection(projects: List<Project>, tasks: List<Task>, jumps: ColumnJumps, columns: Int) {
+private fun ProjectsSection(projects: List<Project>, tasks: List<Task>, jumps: ColumnJumps?, columns: Int) {
     val c = GlanceTheme.colors
     val context = LocalContext.current
     SectionHeader("Projects") {
-        TopArrow(jumps)
-        Spacer(Modifier.width(12.dp))
+        if (jumps != null) {
+            TopArrow(jumps)
+            Spacer(Modifier.width(12.dp))
+        }
         Text("Projects", color = c.accent, fontSize = 11.sp, modifier = Modifier.clickable { GlanceIntents.openProjectsPanel(context) })
     }
     Spacer(Modifier.height(8.dp))
@@ -437,12 +549,13 @@ private fun ProjectsSection(projects: List<Project>, tasks: List<Task>, jumps: C
 
 // region lastGLANCE
 
+/** lastGLANCE's chores: every pin, then what is due now and due soon. */
 @Composable
-private fun LastGlanceSection(controller: LauncherController, chores: List<Chore>, people: List<Person>, jumps: ColumnJumps?, compact: Boolean = false) {
+private fun ChoresSection(controller: LauncherController, chores: List<Chore>) {
     val c = GlanceTheme.colors
     val context = LocalContext.current
     val nowMin = rememberNowMinute()
-    val now = remember(chores, people, nowMin, controller.today) { Instant.now() }
+    val now = remember(chores, nowMin, controller.today) { Instant.now() }
     data class Scored(val chore: Chore, val ratio: Double?, val state: CadenceState)
     val scored = chores.map { ch ->
         val ratio = Cadence.ratio(Cadence.elapsedDays(ch.lastDoneAt, now), ch.targetCadenceDays)
@@ -451,13 +564,6 @@ private fun LastGlanceSection(controller: LauncherController, chores: List<Chore
     val attention = scored.filter { it.state == CadenceState.OVERDUE || it.state == CadenceState.DUE_SOON }.sortedByDescending { it.ratio ?: 0.0 }
     val overdueCount = scored.count { it.state == CadenceState.OVERDUE }
 
-    // The arrow only where lastGLANCE follows the rest of the column; in landscape it is its own column.
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        LastGlanceWordmark(size = 18.dp)
-        Spacer(Modifier.weight(1f))
-        if (jumps != null) TopArrow(jumps)
-    }
-    Spacer(Modifier.height(8.dp))
     // Every pin, as the app keeps every pin in view; nothing when none is pinned. A pinned chore
     // that is due also shows under Due soon, as a pin also shows in its own category in the app.
     val pinned = remember(chores, now) { Cadence.pinned(chores, now) }
@@ -484,8 +590,15 @@ private fun LastGlanceSection(controller: LauncherController, chores: List<Chore
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         for (s in attention.take(8)) ChoreRow(s.chore, s.ratio, now, controller)
     }
+}
 
-    Spacer(Modifier.height(16.dp))
+/** lastGLANCE's people: the dates coming up, then who to reach out to. */
+@Composable
+private fun PeopleSection(controller: LauncherController, people: List<Person>, compact: Boolean) {
+    val c = GlanceTheme.colors
+    val context = LocalContext.current
+    val nowMin = rememberNowMinute()
+    val now = remember(people, nowMin, controller.today) { Instant.now() }
     ComingUpSection(people, controller, compact)
 
     Spacer(Modifier.height(16.dp))

@@ -116,11 +116,11 @@ private val ACTION_ICON = 18.dp
 private val CardShape = RoundedCornerShape(12.dp)
 
 /**
- * Jump targets below the agenda, offered as buttons at the right end of the controls row.
- * [toLastGlance] is null where lastGLANCE is another column; [compact] tightens the chips so
- * Filter plus three arrowed chips fit a phone's one line with margin.
+ * Jump targets below the agenda, offered as buttons at the right end of the controls row;
+ * passed only where Goals and Projects follow the agenda in the same column (D80). [compact]
+ * tightens the chips so Filter and the arrowed chips fit a phone's one line with margin.
  */
-class SchedJumps(val toGoals: () -> Unit, val toProjects: () -> Unit, val toLastGlance: (() -> Unit)? = null, val compact: Boolean = false)
+class SchedJumps(val toGoals: () -> Unit, val toProjects: () -> Unit, val compact: Boolean = false)
 
 /** SCHED, starting at [startDay]. [tasks] is the whole task list; the view does its own grouping. */
 @Composable
@@ -178,7 +178,6 @@ fun SchedView(
                 Spacer(Modifier.weight(1f))
                 ControlButton(icon = GlanceIcons.ArrowDown, label = "Goals", active = false, onClick = jumps.toGoals, padH = pad)
                 ControlButton(icon = GlanceIcons.ArrowDown, label = "Projects", active = false, onClick = jumps.toProjects, padH = pad)
-                if (jumps.toLastGlance != null) ControlButton(icon = GlanceIcons.ArrowDown, label = "lastGLANCE", active = false, onClick = jumps.toLastGlance, padH = pad)
             }
         }
 

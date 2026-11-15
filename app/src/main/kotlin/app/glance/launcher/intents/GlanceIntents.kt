@@ -20,6 +20,7 @@ object GlanceIntents {
     const val DAYGLANCE_PACKAGE = "com.dayglance.app"
     const val LASTGLANCE_PACKAGE = "com.lastglance.app"
     private const val LASTGLANCE_MAIN = "com.lastglance.app.MainActivity"
+    const val THINGGLANCE_PACKAGE = "com.thingglance.app"
 
     /** dayGLANCE's own voice capture entry point; the launcher asks for no microphone permission. */
     const val ACTION_DAYGLANCE_VOICE = "com.dayglance.app.ACTION_VOICE_INPUT"
@@ -109,6 +110,31 @@ object GlanceIntents {
             return
         }
         Toast.makeText(context, "Voice capture opens dayGLANCE once it is installed (placeholder intent fired).", Toast.LENGTH_SHORT).show()
+    }
+
+    /**
+     * thingGLANCE: `thingglance://` is a registered VIEW scheme, so an implicit intent resolves.
+     * Its links only ever navigate (its `docs/links-and-intents.md`); a date's own link comes in
+     * the snapshot and is handed over as it is.
+     */
+    fun openThingGlance(context: Context, link: String = "thingglance://view/glance") {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(link)).setPackage(THINGGLANCE_PACKAGE).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        start(context, intent, "thingGLANCE")
+    }
+
+    fun openThing(context: Context, thingId: String) = openThingGlance(context, "thingglance://thing/${Uri.encode(thingId)}")
+    fun openThingsView(context: Context, view: String) = openThingGlance(context, "thingglance://view/$view")
+    /** The add-a-thing form. */
+    fun addThing(context: Context) = openThingGlance(context, "thingglance://action/add")
+
+    /** thingGLANCE opened plainly, wherever it was last. */
+    fun launchThingGlance(context: Context) {
+        val intent = context.packageManager.getLaunchIntentForPackage(THINGGLANCE_PACKAGE)
+        if (intent == null) {
+            Toast.makeText(context, "thingGLANCE is not installed.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        start(context, intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED), "thingGLANCE")
     }
 
     fun installPrompt(context: Context, packageName: String) {

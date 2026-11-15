@@ -40,9 +40,10 @@ portrait.
   lastGLANCE's chores and people with Done and Log buttons, a row of pinned apps and the search
   bar. On a tablet the dial's corners show the Inbox count, deadlines, the share done and
   lastGLANCE's due chores. Nothing on Home scrolls.
-- **Planning, one swipe away.** A month grid and the agenda from dayGLANCE's SCHED view, goals and
-  projects with their progress, lastGLANCE's pinned and due chores, upcoming birthdays and
-  anniversaries, and people to reach out to. Taps open the matching screen in the app.
+- **Planning, a swipe away.** A page per app, left of Home. dayGLANCE's has a month grid and the
+  agenda from its SCHED view, and goals and projects with their progress; lastGLANCE's has pinned
+  and due chores, upcoming birthdays and anniversaries, and people to reach out to. Taps open the
+  matching screen in the app.
 - **Search and quick capture.** One search for apps, app shortcuts, Settings pages, contacts (if
   you allow it), your dayGLANCE tasks, projects and goals, and your lastGLANCE chores and people.
   It also does sums and ends with a web search. Typing a task in dayGLANCE's quick-add grammar
@@ -54,7 +55,7 @@ portrait.
 - **App drawer.** Alphabetical and searchable, with apps you opened recently at the top. Hide apps,
   pin them to Home or the taskbar, and reach an app's shortcuts from a long press. Swipe up on Home
   to open it and down to close it.
-- **Taskbar.** Optional, under both pages: pinned apps on the left, recent ones on the right. Drag
+- **Taskbar.** Optional, under every page: pinned apps on the left, recent ones on the right. Drag
   an icon upward to open it in split screen.
 - **Small things a home screen should do.** Notification dots, themed icons (Android 13 and
   later), double-tap to lock, pull down for the notification shade, "Add to Home screen" from

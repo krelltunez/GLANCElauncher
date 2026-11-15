@@ -32,6 +32,7 @@ class FakeRepository(
     private val _weather = MutableStateFlow(seed.weather)
     private val _chores = MutableStateFlow(seed.chores)
     private val _people = MutableStateFlow(seed.people)
+    private val _thingGlance = MutableStateFlow<ThingGlanceData?>(seed.thingGlance)
     private val _availability = MutableStateFlow(Availability(dayGlanceInstalled = true, lastGlanceInstalled = true))
 
     override val tasks: StateFlow<List<Task>> = _tasks.asStateFlow()
@@ -45,6 +46,7 @@ class FakeRepository(
     override val inboxCount: StateFlow<Int?> = MutableStateFlow<Int?>(null).asStateFlow()
     override val chores: StateFlow<List<Chore>> = _chores.asStateFlow()
     override val people: StateFlow<List<Person>> = _people.asStateFlow()
+    override val thingGlance: StateFlow<ThingGlanceData?> = _thingGlance.asStateFlow()
     override val availability: StateFlow<Availability> = _availability.asStateFlow()
 
     /**
@@ -62,7 +64,12 @@ class FakeRepository(
         _weather.value = seed.weather
         _chores.value = seed.chores
         _people.value = seed.people
+        _thingGlance.value = seed.thingGlance
     }
+
+    override suspend fun decideThingDate(event: ThingEvent) = _thingGlance.update { it?.let { d -> ThingGlance.decided(d, event.key) } }
+    override suspend fun restoreThingDate(event: ThingEvent) = _thingGlance.update { it?.let { d -> ThingGlance.restored(d, event) } }
+    override suspend fun sendThingDate(event: ThingEvent) = _thingGlance.update { it?.let { d -> ThingGlance.sent(d, event.key) } }
 
     override suspend fun moveTask(taskId: String, date: LocalDate, startMin: Int) {
         _tasks.update { list ->
@@ -314,4 +321,52 @@ class FakeSeed(val today: LocalDate, val now: Instant, val zone: ZoneId) {
         Person("person-jo", "Jo Whitfield", "Jo", "Work", 21, daysAgo(5, 16), "video", specialDate = java.time.MonthDay.from(today.plusDays(25)), specialLabel = "Work anniversary"),
         Person("person-aunt", "Aunt Ruth", null, "Family", 60, null, null),
     )
+
+    /** thingGLANCE's page for the screenshot demo: a small household's things, dates and plans. */
+    val thingGlance: ThingGlanceData = run {
+        fun event(type: String, id: String, days: Long, severity: String, title: String, detail: String, amount: Double? = null, state: String = "open") =
+            ThingEvent("$type:$id:${today.plusDays(days)}", type, today.plusDays(days), severity, title, detail, amount, state, "thingglance://queue")
+        val attention = listOf(
+            event("trial-end", "s-stream", 2, "urgent", "Paramount+ trial converts", "Subscription · then $11.99/mo", 11.99),
+            event("coverage-end", "c-mac", 9, "urgent", "AppleCare+ ends", "MacBook Pro 14"),
+            event("renewal", "s-domain", 21, "soon", "Domain renews", "Subscription", 18.0, state = "sent"),
+            event("support-end", "t-pixel", 40, "soon", "Security updates end", "Pixel 6"),
+        )
+        val upcoming = attention + listOf(
+            event("renewal", "s-cloud", 58, "later", "iCloud+ renews", "Subscription", 119.0),
+            event("replace", "t-vac", 96, "later", "Planned replacement", "Robot vacuum"),
+            event("coverage-end", "c-tv", 141, "later", "Manufacturer warranty ends", "Living room TV"),
+            event("renewal", "s-vpn", 203, "later", "VPN renews", "Subscription", 59.0),
+            event("support-end", "t-watch", 290, "later", "Updates likely end", "Watch"),
+        )
+        fun thing(id: String, name: String, verdict: String, startDaysAgo: Long, endDays: Long, coverageDays: Long? = null, reason: String = "plan") = ThingItem(
+            id, name, "", verdict, remaining = (endDays.toFloat() / (startDaysAgo + endDays)).coerceIn(0f, 1f),
+            lifeEnd = today.plusDays(endDays), lifeStart = today.minusDays(startDaysAgo), coverageEnd = coverageDays?.let { today.plusDays(it) },
+            supportEnd = if (reason == "support") today.plusDays(endDays) else null, lifeEndReason = reason,
+        )
+        val start = today.withDayOfMonth(1)
+        ThingGlanceData(
+            hasData = true, builtFor = today, currency = "USD", locale = "en-US",
+            counts = ThingCounts(things = 8, plans = 6, attention = attention.size, urgent = 2, covered = 3),
+            monthlyPlans = 64.5, fundMonthly = 118.0, chargesTotal = 41.98, chargesCount = 3,
+            months = listOf(41.98, 12.0, 131.0, 12.0, 30.0, 12.0, 12.0, 71.0, 12.0, 12.0, 42.0, 12.0).mapIndexed { i, total -> ThingMonth(start.plusMonths(i.toLong()), total) },
+            attention = attention, upcoming = upcoming,
+            things = listOf(
+                thing("t-pixel", "Pixel 6", "replace", 1420, 40, reason = "support"),
+                thing("t-vac", "Robot vacuum", "watch", 1000, 96),
+                thing("t-watch", "Watch", "watch", 900, 290, reason = "support"),
+                thing("t-mac", "MacBook Pro 14", "solid", 720, 740, coverageDays = 9),
+                thing("t-tv", "Living room TV", "solid", 220, 1600, coverageDays = 141),
+                thing("t-fridge", "Refrigerator", "prime", 300, 3350, coverageDays = 430),
+                thing("t-router", "Router", "prime", 120, 1700),
+                ThingItem("t-lamp", "Desk lamp"),
+            ),
+            charges = listOf(
+                ThingCharge("s-stream", "Paramount+", today.plusDays(2), 11.99, "thingglance://view/plans"),
+                ThingCharge("s-music", "Music", today.plusDays(12), 11.99, "thingglance://view/plans"),
+                ThingCharge("s-domain", "Domain", today.plusDays(21), 18.0, "thingglance://view/plans"),
+            ),
+            canSend = true,
+        )
+    }
 }

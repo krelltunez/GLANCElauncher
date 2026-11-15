@@ -183,22 +183,26 @@ deliberate property of the in-app dial.
 ### `:app` (the launcher)
 
 - `data/GlanceRepository.kt`: the one interface the UI reads and writes through.
-  `ProviderRepository` is the real backend (decision 34): the two apps' ContentProviders read
-  through `data/provider/GlanceClient.kt`, rows mapped by `data/provider/SnapshotParser.kt`,
+  `ProviderRepository` is the real backend (decision 34): the apps' ContentProviders read
+  through `data/provider/GlanceClient.kt`, rows mapped by `data/provider/SnapshotParser.kt`
+  (and `ThingGlanceParser.kt` for thingGLANCE, the optional third app, decision 81),
   writes held in `data/provider/Outbox.kt` until a snapshot shows them. `FakeRepository` is the
   seeded demo it falls back to, per app. `di/AppGraph.kt` holds the single binding.
-- `ui/LauncherRoot.kt`: a two-page pager on every size, Home as the default page and planning
-  a swipe away. Home presses and Back return to Home. The taskbar renders under both.
+- `ui/LauncherRoot.kt`: the pager, on every size: Home as the default page and one planning
+  page per app to its left, in the order `ui/planning/PlanningPages.kt` gives (decision 80),
+  with the page indicator over them. Home presses and Back return to Home. The taskbar renders
+  under every page.
 - `ui/home/`: Home, with the dial as the star. Landscape: the dial fills the height on the
   left; beside it the All Day pill, the breakdown (the in-app legend), the week strip, the
   lastGLANCE cards, one row of pinned apps and the search bar with the mic. Portrait stacks the
   same column under a full-width dial. Nothing scrolls; swipe up opens the drawer. The dial's
   four corners carry complications: a Done ring, Inbox and Deadlines counts, and lastGLANCE's
   Due now count.
-- `ui/planning/`: landscape is one column per app, each scrolling on its own: dayGLANCE
-  (month grid on the in-app cell metrics, the SCHED agenda for the selected day, goal rings
-  with per-project bars, project cards) and lastGLANCE (pinned and due chores, Coming up,
-  Reach out). Portrait stacks them. Taps deep-link into the apps.
+- `ui/planning/`: a page per app (`PlanningScreen.kt`): dayGLANCE (month grid on the in-app
+  cell metrics, the SCHED agenda for the selected day, goal rings with per-project bars,
+  project cards) and lastGLANCE (pinned and due chores, Coming up, Reach out). Tablet landscape
+  splits a page into two columns, each scrolling on its own; portrait and phone stack them.
+  Taps deep-link into the apps.
 - `ui/drawer/`: alphabetical searchable drawer; long-press opens the app menu.
 - `ui/dock/`: the GLANCE taskbar; pinned on the left, recents on the right.
 - `ui/search/SearchEngine.kt` + `quickadd/QuickAddParser.kt`: search over apps, shortcuts,

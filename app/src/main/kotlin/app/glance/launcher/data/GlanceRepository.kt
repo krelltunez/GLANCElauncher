@@ -1,5 +1,6 @@
 package app.glance.launcher.data
 
+import app.glance.launcher.data.provider.GlanceApp
 import java.time.LocalDate
 import kotlinx.coroutines.flow.StateFlow
 
@@ -26,6 +27,12 @@ interface GlanceRepository {
     val inboxCount: StateFlow<Int?>
     val chores: StateFlow<List<Chore>>
     val people: StateFlow<List<Person>>
+    /**
+     * thingGLANCE as its planning page shows it, or null when there is no page to show: the app
+     * is not installed, is older than its launcher integration, or does not trust this build's
+     * signature. Unlike the other two it has no demo to fall back on (D81).
+     */
+    val thingGlance: StateFlow<ThingGlanceData?>
 
     /** Which apps back this repository, so the UI can prompt to install what is missing. */
     val availability: StateFlow<Availability>
@@ -43,6 +50,17 @@ interface GlanceRepository {
     suspend fun logChoreDone(choreId: String)
     suspend fun addChore(name: String): Chore
     suspend fun logInteraction(personId: String)
+
+    // thingGLANCE writes
+    /** "Done with this": the date leaves what needs a decision. */
+    suspend fun decideThingDate(event: ThingEvent)
+    /** Puts back a date that was cleared. */
+    suspend fun restoreThingDate(event: ThingEvent)
+    /** Hands the date to dayGLANCE as a task; it stays in view, marked as sent. */
+    suspend fun sendThingDate(event: ThingEvent)
+
+    /** [app]'s planning page came into view: a chance to ask for fresher data than the return to Home did. */
+    suspend fun planningShown(app: app.glance.launcher.data.provider.GlanceApp) {}
 
     /**
      * Ask [app] to confirm its data now (the apps' REFRESH action). Not a write: nothing is
@@ -96,6 +114,17 @@ data class Availability(
     val lastGlanceUpdatedAt: java.time.Instant? = null,
     val dayGlanceFreshness: Freshness = Freshness(dayGlance, dayGlanceInstalled, dayGlanceUpdatedAt),
     val lastGlanceFreshness: Freshness = Freshness(lastGlance, lastGlanceInstalled, lastGlanceUpdatedAt),
+    /** thingGLANCE is optional: it has a planning page when its data is live, and no banner asks for it. */
+    val thingGlanceInstalled: Boolean = false,
+    val thingGlance: DataSource = DataSource.DEMO,
+    val thingGlanceFreshness: Freshness = Freshness(thingGlance, thingGlanceInstalled),
     /** The screenshot demo is on (debug builds): both apps show demo data, and the header says nothing about it. */
     val demoForced: Boolean = false,
-)
+) {
+    /** [app]'s freshness: the one place an app is matched to its fields here. */
+    fun freshness(app: GlanceApp): Freshness = when (app) {
+        GlanceApp.DAYGLANCE -> dayGlanceFreshness
+        GlanceApp.LASTGLANCE -> lastGlanceFreshness
+        GlanceApp.THINGGLANCE -> thingGlanceFreshness
+    }
+}

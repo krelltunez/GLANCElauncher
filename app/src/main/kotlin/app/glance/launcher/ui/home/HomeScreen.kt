@@ -96,6 +96,7 @@ import app.glance.launcher.ui.common.DayCell
 import app.glance.launcher.ui.common.SectionHeader
 import app.glance.launcher.ui.common.LauncherWordmark
 import app.glance.launcher.ui.common.topBarsPadding
+import app.glance.launcher.ui.planning.PlanningPages
 import app.glance.launcher.ui.theme.GlanceTheme
 import app.glance.launcher.ui.theme.LoraFamily
 import app.glance.launcher.ui.toDialBlock
@@ -468,29 +469,27 @@ fun rememberNowMinute(): Int {
 @Composable
 private fun HomeHeader(controller: LauncherController) {
     val c = GlanceTheme.colors
-    val context = LocalContext.current
     Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         LauncherWordmark(size = 20.dp)
         val availability by controller.repository.availability.collectAsState()
         Spacer(Modifier.weight(1f))
-        // One tap into each app, by its own launcher icon; an app that is not installed has none.
-        // The icon carries the app's data status: an amber dot once its data is past STALE_AFTER
-        // (or demo), where opening the app is also what refreshes it. Long-press for diagnostics;
-        // Settings has the status in words. The header row has no room left for it as text.
+        // One tap to each app's planning page, by the app's own launcher icon (D80); an app that
+        // is not installed has none. The page's wordmark is what opens the app. The icon carries
+        // the app's data status: an amber dot once its data is past STALE_AFTER (or demo), which
+        // the page's header then says in words. Long-press for diagnostics; Settings has the
+        // status too. The header row has no room left for it as text.
         val apps by controller.graph.apps.apps.collectAsState()
         val now = Instant.now()
-        for ((pkg, name, freshness, open) in listOf(
-            HeaderApp(GlanceIntents.DAYGLANCE_PACKAGE, "dayGLANCE", availability.dayGlanceFreshness) { GlanceIntents.launchDayGlance(context) },
-            HeaderApp(GlanceIntents.LASTGLANCE_PACKAGE, "lastGLANCE", availability.lastGlanceFreshness) { GlanceIntents.launchLastGlance(context) },
-        )) {
-            val entry = apps.firstOrNull { it.packageName == pkg } ?: continue
+        for (app in PlanningPages.apps(availability)) {
+            val name = PlanningPages.name(app)
+            val entry = apps.firstOrNull { it.packageName == app.packageName } ?: continue
             // The screenshot demo hides the badge: a clean header (Settings says it is on).
-            val word = if (availability.demoForced) null else appStatusWord(freshness, now)
+            val word = if (availability.demoForced) null else appStatusWord(availability.freshness(app), now, app.staleAfter)
             Box(
                 Modifier
                     .size(34.dp)
-                    .combinedClickable(onClick = open, onLongClick = { controller.diagnosticsOpen = true })
-                    .semantics { contentDescription = if (word == null) "Open $name" else "Open $name, data $word" },
+                    .combinedClickable(onClick = { controller.showPlanning(app) }, onLongClick = { controller.diagnosticsOpen = true })
+                    .semantics { contentDescription = if (word == null) "$name planning" else "$name planning, data $word" },
                 contentAlignment = Alignment.Center,
             ) {
                 AppIcon(entry, controller.graph.apps, size = 26.dp)
@@ -522,9 +521,6 @@ private fun HomeHeader(controller: LauncherController) {
         )
     }
 }
-
-/** One app's quick-open icon in Home's header, with what its status badge reads from. */
-private data class HeaderApp(val pkg: String, val name: String, val freshness: app.glance.launcher.data.Freshness, val open: () -> Unit)
 
 @Composable
 private fun InstallBanner(day: Boolean, last: Boolean) {

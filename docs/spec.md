@@ -18,13 +18,13 @@ GLANCEvault client) and the Pro+ tier are dropped; there is no v2.
 
 GLANCElauncher is an Android home screen replacement that puts dayGLANCE and lastGLANCE at
 the centre of the device. It is a focus launcher, not a general-purpose launcher: an
-opinionated Home and planning screen, with one row of the user's own app shortcuts.
+opinionated Home and a planning page per app, with one row of the user's own app shortcuts.
 
 **Goals**
 
 - Make the Day Dial the first thing seen on every unlock.
 - Capture tasks in seconds from Home, by typing or voice.
-- Surface planning context (month, agenda, goals, projects, upkeep, people) one swipe away.
+- Surface planning context (month, agenda, goals, projects, upkeep, people) a swipe or two away.
 - Leave room for the user's other apps without becoming a general launcher.
 
 ## Shell
@@ -35,10 +35,19 @@ recreate it freely. No DI framework: `AppGraph` is a plain class with one reposi
 (D3). No widgets: the `AppWidgetHost` area of the first cut was removed in the layout revision;
 the dial takes the space and the pinned row is the user area (D5).
 
-**Pages.** A two-page horizontal pager on every size: planning on the left, Home on the
-right. Home is the default page and where the Home button and Back return. There is no
-side-by-side mode: the pane split made the dial a third of the width, so the dial gets the
-height on every size and planning is a swipe (D17). No user screens to the right of Home.
+**Pages.** A horizontal pager on every size: Home on the right, and to its left one planning
+page per app, dayGLANCE's nearest, lastGLANCE's beyond it (D80), and thingGLANCE's last, there
+only when thingGLANCE is installed and readable (D81). Home is the default page
+and where the Home button and Back return. There is no side-by-side mode: the pane split made
+the dial a third of the width, so the dial gets the height on every size and planning is a
+swipe (D17). No user screens to the right of Home. While a planning page is in front a small
+pill at the foot of the page, above the taskbar or the navigation bar, shows one dot per
+planning page in the app's colour, in the order the pages sit, the page in front filled; a tap
+on a dot goes to its page. It fades out towards Home, which has no dot. The pill and each
+page's "+" float over the page; every column ends with a blank foot tall enough for its last
+row to scroll clear of both. The order of the pages
+is `PlanningPages`, a pure object: the list of apps can change while the launcher runs, and
+the pager stays on the page it was showing when it does.
 
 **Window classes.** Three layouts, chosen by the window's size, not the device:
 
@@ -48,7 +57,7 @@ height on every size and planning is a swipe (D17). No user screens to the right
 | Tablet portrait | width ≥ 600 dp and height ≥ width | free |
 | Phone | width < 600 dp | locked to portrait (D29) |
 
-**Overlays**, drawn over both pages: the full-screen search, the app drawer, the pinned apps
+**Overlays**, drawn over every page: the full-screen search, the app drawer, the pinned apps
 editor, Settings, the SCHED filter sheet, and a toast. Back closes the top overlay, then
 returns to Home.
 
@@ -80,8 +89,8 @@ opens the drawer.
 
 **Tablet landscape.** The dial fills the height on the left in a rounded dark panel, its width
 capped so the column beside it keeps at least 560 dp. The column, top to bottom: the header
-(the GLANCElauncher wordmark, each app's icon to open it with its data-status badge, lock and
-settings glyphs; D44, D45); the **All day & deadlines** pill (all-day items behind a
+(the GLANCElauncher wordmark, each app's icon with its data-status badge, which goes to that
+app's planning page, lock and settings glyphs; D44, D45, D80); the **All day & deadlines** pill (all-day items behind a
 calendar glyph, deadlines due within a week behind a calendar-clock glyph, as rose chips with
 "in 2d"); the **breakdown legend** in a fixed two-row order (Effort, Restore, Sleep, Focus;
 Done, Routines, Frames, Unblocked, dashes for missing data) (D18, D21); the **week strip**,
@@ -156,24 +165,46 @@ in). Without coordinates the daylight band falls back to a half-sine.
 
 ## Planning
 
-Taps deep-link into the apps; nothing is edited in place except the writes the repository
-offers (complete, schedule, postpone, log).
+One page per app (D80), each with a header: the app's wordmark, which opens the app, the word
+"planning", and that app's own data status ("live", "demo data", "last confirmed 3h ago"),
+long-pressed for diagnostics. Taps deep-link into the app; nothing is edited in place except
+the writes the repository offers (complete, schedule, postpone, log).
 
-**Tablet landscape**: one scrolling column per app. **dayGLANCE**: the month grid on the in-app
-cell metrics (bands in lanes, calendar events capped darker, diamonds for deadlines, a +N
-badge), with the selected day feeding the agenda; the agenda, a direct port of SCHED
-(`SchedView.jsx`, `SchedTaskCard.jsx`, `SchedDayExtras.jsx`, `SchedFilterPopup.jsx`) with
-its rules as pure, tested functions (D24): the rolling 14-day window from the selected day,
-the Overdue section, deadline cards, today's routine pills, the uniform two-line card, the
-filter sheet, whose selections are remembered (D61); then Goals (rings with per-project bars,
-soonest target date first, D67) and Projects (cards with progress). **lastGLANCE**: pinned
-chores (D68), due now and due soon chores (the app's ChoreRow with the cadence fill), Coming
-up (the People home's date tiles, four across on a tablet) and Reach out (D25). A "+" adds a
-task (through the search parser), a chore, or a person (in lastGLANCE's own form) (D41).
+**dayGLANCE's page**: the month grid on the in-app cell metrics (bands in lanes, calendar
+events capped darker, diamonds for deadlines, a +N badge), with the selected day feeding the
+agenda; the agenda, a direct port of SCHED (`SchedView.jsx`, `SchedTaskCard.jsx`,
+`SchedDayExtras.jsx`, `SchedFilterPopup.jsx`) with its rules as pure, tested functions (D24):
+the rolling 14-day window from the selected day, the Overdue section, deadline cards, today's
+routine pills, the uniform two-line card, the filter sheet, whose selections are remembered
+(D61); then Goals (rings with per-project bars, soonest target date first, D67) and Projects
+(cards with progress). The "+" is orange and opens the one-line task sheet at once (through
+the search parser).
 
-**Tablet portrait and phone**: one column, dayGLANCE then lastGLANCE. Jump chips at the end
-of the SCHED controls row (Goals, Projects, and lastGLANCE where it shares the column), up
-arrows in those headers, and a Back to top row at the foot (D26). On a phone the month cells
+**lastGLANCE's page**: pinned chores (D68), due now and due soon chores (the app's ChoreRow
+with the cadence fill), Coming up (the People home's date tiles) and Reach out (D25). The "+"
+is green and offers a chore (one line) or a person (in lastGLANCE's own form) (D41); it is
+there only with lastGLANCE installed.
+
+**thingGLANCE's page** (D81), when the app is installed: a port of the app's Glance screen.
+The headline panel (the day and a status word, how many dates want a decision, the first of
+them in a sentence, four figures: things in service, plan cost a month, charges in the next 30
+days, the upgrade fund's monthly target) with the twelve-month strip, a pip per date in a lane
+per kind; "Needs a decision", each date with its T-minus badge, "Send to dayGLANCE" when the
+app is connected and "Done with this", and under it "Recently cleared" with Restore; the Fleet,
+the seven things closest to the end of their window, each with its life ring, life bar and
+countdown; and plan charges month by month. The words on a date are the app's own. The "+" is
+sky blue and opens the app's add-a-thing form. Installed and never opened, the page asks to
+open the app once.
+
+**Tablet landscape**: the header across the top and two columns under it, each scrolling on
+its own. dayGLANCE: month and agenda on the left, Goals and Projects on the right. lastGLANCE:
+chores (Pinned, Due) on the left, people (Coming up, four across, and Reach out) on the right.
+thingGLANCE: the headline panel and what needs a decision on the left, the Fleet and plan
+charges on the right. The agenda's column ends with a Back to top row.
+
+**Tablet portrait and phone**: one column per page. On dayGLANCE's, jump chips at the end of
+the SCHED controls row (Goals, Projects), up arrows in those two headers, and a Back to top
+row at the foot (D26); lastGLANCE's ends with the Back to top row. On a phone the month cells
 are 10:7 rather than square, the controls chips tighten to stay on one line, project cards go
 full width and the Coming up tiles are the app's three across, nine at most.
 
@@ -195,7 +226,7 @@ opens the shared app menu: the app's own shortcuts, App info, hide or show, pin 
 to the taskbar, uninstall (D48, D53). Icon bitmaps are cached. Opens from the search bar's grid
 button, a swipe up on Home, or a swipe up on the taskbar; a swipe down closes it (D64).
 
-**Taskbar** ("GLANCE taskbar", D6): toggleable, under both pages, above the navigation bar;
+**Taskbar** ("GLANCE taskbar", D6): toggleable, under every page, above the navigation bar;
 pinned apps on the left, recents on the right. Recents come from the launcher's own launch
 history; optional usage access, offered in Settings and never by the taskbar, adds apps used
 elsewhere (D42). Labels optional. A long press opens the app menu; a long-press drag upward
@@ -310,7 +341,8 @@ to package without it, and debug builds carry it where it is present (`app/build
 D73). Its digest fills the release slot of each app's `launcher_certs.xml`. The debug
 certificate that stood in during development is out of both apps, and Google Play's app
 signing uses the same release key, so Play and sideloaded installs carry one certificate and
-the Play slot is not needed. The launcher declares `uses-permission` for both. The provider and
+the Play slot is not needed. The launcher declares `uses-permission` for both, and for
+thingGLANCE's `com.thingglance.permission.LAUNCHER`, which lists the same digest (D81). The provider and
 the launcher receiver are both behind the permission, so Play and sideloaded builds
 interoperate and no other app can read or write. `knownSigner` exists from Android 12 (API
 31), so the launcher's minSdk is 31: below it the launcher could only ever show demo data
@@ -332,10 +364,13 @@ launcher re-reads both providers and sends each app a `REFRESH`, at most once pe
 minutes and not when its last sync is under two minutes old (D38). An alive app runs every sync
 tier and re-pushes; a dead one runs a headless refresh, the web bundle in a WebView with no
 Activity that syncs, pushes the snapshot and reports, at most once per ten minutes (D40, D46).
+thingGLANCE keeps the same contract on its own clock (D81): asked every three hours on a
+return to Home and every ten minutes while its page is in front, and stale after a day.
 Every request and run is logged in the app's meta. The UI shows when the data is stale: each
 app's icon in Home's header carries an amber dot once its data is unconfirmed for an hour (or
-is demo), Planning's header names it, and the diagnostics panel (long-press either icon) shows
-each app's freshness and refresh log (D45, D54). The pill and cards read from the stale data
+is demo), the header of its planning page says so in words, and the diagnostics panel
+(long-press an icon, or the status in a planning header) shows each app's freshness and
+refresh log (D45, D54). The pill and cards read from the stale data
 rather than going blank.
 
 **5. Demo mode.** If an app's provider is absent (not installed, an older version, or a signer

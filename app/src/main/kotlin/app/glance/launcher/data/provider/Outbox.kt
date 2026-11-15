@@ -6,6 +6,9 @@ import app.glance.launcher.data.Person
 import app.glance.launcher.data.Routine
 import app.glance.launcher.data.Task
 import app.glance.launcher.data.TaskColors
+import app.glance.launcher.data.ThingEvent
+import app.glance.launcher.data.ThingGlance
+import app.glance.launcher.data.ThingGlanceData
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -45,6 +48,11 @@ sealed class Patch {
     data class LogChore(val choreId: String, val at: Instant) : Patch()
     data class AddChore(val chore: Chore) : Patch()
     data class LogInteraction(val personId: String, val at: Instant) : Patch()
+    /** thingGLANCE's "Done with this" on the date [eventKey]. */
+    data class DecideThing(val eventKey: String) : Patch()
+    /** A cleared date put back; [event] is the whole date, since the snapshot no longer lists it. */
+    data class RestoreThing(val event: ThingEvent) : Patch()
+    data class SendThing(val eventKey: String) : Patch()
 }
 
 object Outbox {
@@ -111,6 +119,19 @@ object Outbox {
         return out
     }
 
+    fun applyToThings(data: ThingGlanceData, entries: List<OutboxEntry>): ThingGlanceData {
+        var out = data
+        for (e in entries) {
+            when (val p = e.patch) {
+                is Patch.DecideThing -> out = ThingGlance.decided(out, p.eventKey)
+                is Patch.RestoreThing -> out = ThingGlance.restored(out, p.event)
+                is Patch.SendThing -> out = ThingGlance.sent(out, p.eventKey)
+                else -> {}
+            }
+        }
+        return out
+    }
+
     // region persistence
 
     fun encode(entries: List<OutboxEntry>): String {
@@ -159,6 +180,9 @@ object Outbox {
         is Patch.LogChore -> JSONObject().put("type", "logChore").put("choreId", p.choreId).put("at", p.at.toEpochMilli())
         is Patch.AddChore -> JSONObject().put("type", "addChore").put("id", p.chore.id).put("name", p.chore.name).put("category", p.chore.category)
         is Patch.LogInteraction -> JSONObject().put("type", "logInteraction").put("personId", p.personId).put("at", p.at.toEpochMilli())
+        is Patch.DecideThing -> JSONObject().put("type", "decideThing").put("eventKey", p.eventKey)
+        is Patch.RestoreThing -> JSONObject().put("type", "restoreThing").put("event", encodeThingEvent(p.event))
+        is Patch.SendThing -> JSONObject().put("type", "sendThing").put("eventKey", p.eventKey)
     }
 
     private fun decodePatch(o: JSONObject): Patch? = when (o.optString("type")) {
@@ -171,6 +195,9 @@ object Outbox {
         "logChore" -> Patch.LogChore(o.getString("choreId"), Instant.ofEpochMilli(o.getLong("at")))
         "addChore" -> Patch.AddChore(Chore(o.getString("id"), o.getString("name"), o.optString("category", "Inbox")))
         "logInteraction" -> Patch.LogInteraction(o.getString("personId"), Instant.ofEpochMilli(o.getLong("at")))
+        "decideThing" -> Patch.DecideThing(o.getString("eventKey"))
+        "restoreThing" -> Patch.RestoreThing(decodeThingEvent(o.getJSONObject("event")))
+        "sendThing" -> Patch.SendThing(o.getString("eventKey"))
         else -> null
     }
 
@@ -183,6 +210,17 @@ object Outbox {
         .put("deadline", t.deadline?.toString() ?: JSONObject.NULL)
         .put("colorHex", t.colorHex)
         .put("projectId", t.projectId ?: JSONObject.NULL)
+
+    private fun encodeThingEvent(e: ThingEvent): JSONObject = JSONObject()
+        .put("key", e.key).put("type", e.type).put("date", e.date.toString()).put("severity", e.severity)
+        .put("title", e.title).put("detail", e.detail).put("amount", e.amount ?: JSONObject.NULL)
+        .put("state", e.state).put("link", e.link)
+
+    private fun decodeThingEvent(o: JSONObject): ThingEvent = ThingEvent(
+        key = o.getString("key"), type = o.optString("type"), date = LocalDate.parse(o.getString("date")), severity = o.optString("severity", "later"),
+        title = o.optString("title"), detail = o.optString("detail"), amount = if (o.isNull("amount")) null else o.getDouble("amount"),
+        state = o.optString("state", "open"), link = o.optString("link"),
+    )
 
     private fun decodeTask(o: JSONObject): Task? = try {
         Task(

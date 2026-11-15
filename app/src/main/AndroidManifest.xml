@@ -30,10 +30,12 @@
          behind the app's own knownSigner permission over this launcher's certificates. -->
     <uses-permission android:name="com.dayglance.permission.LAUNCHER" />
     <uses-permission android:name="com.lastglance.permission.LAUNCHER" />
+    <uses-permission android:name="com.thingglance.permission.LAUNCHER" />
 
     <queries>
         <package android:name="com.dayglance.app" />
         <package android:name="com.lastglance.app" />
+        <package android:name="com.thingglance.app" />
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />

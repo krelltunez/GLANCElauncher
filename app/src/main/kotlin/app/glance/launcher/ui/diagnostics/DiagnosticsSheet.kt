@@ -91,6 +91,13 @@ fun DiagnosticsSheet(controller: LauncherController, modifier: Modifier = Modifi
             AppSection("lastGLANCE", availability.lastGlanceFreshness, requests[GlanceApp.LASTGLANCE], now) {
                 scope.launch { repo.requestRefresh(GlanceApp.LASTGLANCE) }
             }
+            // Optional: listed only when it is on the phone.
+            if (availability.thingGlanceInstalled) {
+                Spacer(Modifier.height(14.dp))
+                AppSection("thingGLANCE", availability.thingGlanceFreshness, requests[GlanceApp.THINGGLANCE], now) {
+                    scope.launch { repo.requestRefresh(GlanceApp.THINGGLANCE) }
+                }
+            }
             Spacer(Modifier.height(12.dp))
             Text("Close", color = c.accent, fontSize = 13.sp, modifier = Modifier.clickable { controller.diagnosticsOpen = false }.padding(vertical = 6.dp))
         }

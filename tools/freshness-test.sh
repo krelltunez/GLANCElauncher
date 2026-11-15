@@ -74,7 +74,8 @@ done
 case "$APP" in
   dayglance) PKG=com.dayglance.app; MAIN=.MainActivity ;;
   lastglance) PKG=com.lastglance.app; MAIN=.MainActivity ;;
-  *) echo "--app dayglance|lastglance"; exit 1 ;;
+  thingglance) PKG=com.thingglance.app; MAIN=.MainActivity ;;
+  *) echo "--app dayglance|lastglance|thingglance"; exit 1 ;;
 esac
 LAUNCHER=app.glance.launcher
 ADB="${ADB:-}"

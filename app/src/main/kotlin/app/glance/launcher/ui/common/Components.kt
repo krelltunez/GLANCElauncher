@@ -155,6 +155,23 @@ fun LastGlanceWordmark(modifier: Modifier = Modifier, size: Dp = 16.dp) {
     }
 }
 
+/**
+ * thingGLANCE's wordmark: "thing" heavy in the text colour, "GLANCE" italic in its sky blue,
+ * which is lighter on a dark theme as in the app. Sans, as in that app.
+ */
+@Composable
+fun ThingGlanceWordmark(modifier: Modifier = Modifier, size: Dp = 16.dp) {
+    val c = GlanceTheme.colors
+    Row(modifier, verticalAlignment = Alignment.Bottom) {
+        Text("thing", fontWeight = FontWeight.ExtraBold, fontSize = size.value.sp, color = c.text)
+        Text("GLANCE", fontWeight = FontWeight.Bold, fontStyle = FontStyle.Italic, fontSize = size.value.sp, color = if (c.isDark) ThingGlanceSkyDark else ThingGlanceSky)
+    }
+}
+
+/** thingGLANCE's sky blue: its accent on a light theme, and on a dark one. */
+val ThingGlanceSky = Color(0xFF0284C7)
+val ThingGlanceSkyDark = Color(0xFF38BDF8)
+
 /** lastGLANCE brand green. */
 val LastGlanceGreen = Color(0xFF3DDC84)
 

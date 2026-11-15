@@ -1,5 +1,7 @@
 package app.glance.launcher.ui.settings
 
+import app.glance.launcher.data.provider.GlanceApp
+import app.glance.launcher.ui.planning.PlanningPages
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -282,10 +284,13 @@ fun SettingsSheet(controller: LauncherController, modifier: Modifier = Modifier)
             SectionLabel("About")
             val availability by controller.repository.availability.collectAsState()
             val now = java.time.Instant.now()
-            for ((name, f) in listOf("dayGLANCE" to availability.dayGlanceFreshness, "lastGLANCE" to availability.lastGlanceFreshness)) {
+            // thingGLANCE is optional, so it is listed only when it is on the phone.
+            for (glanceApp in GlanceApp.values()) {
+                val f = availability.freshness(glanceApp)
+                if (glanceApp == GlanceApp.THINGGLANCE && !f.installed) continue
                 Row(Modifier.fillMaxWidth().padding(top = 6.dp)) {
-                    Text(name, color = c.text, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                    Text(appStatusLine(f, now), color = c.textSecondary, fontSize = 13.sp)
+                    Text(PlanningPages.name(glanceApp), color = c.text, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    Text(appStatusLine(f, now, glanceApp.staleAfter), color = c.textSecondary, fontSize = 13.sp)
                 }
             }
             Text(

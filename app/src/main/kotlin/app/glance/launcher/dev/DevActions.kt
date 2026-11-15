@@ -48,7 +48,8 @@ object DevActions {
                 val app = when (intent.getStringExtra("app")?.lowercase()) {
                     "dayglance" -> GlanceApp.DAYGLANCE
                     "lastglance" -> GlanceApp.LASTGLANCE
-                    else -> { Log.w(TAG, "refresh: --es app dayglance|lastglance"); return true }
+                    "thingglance" -> GlanceApp.THINGGLANCE
+                    else -> { Log.w(TAG, "refresh: --es app dayglance|lastglance|thingglance"); return true }
                 }
                 scope.launch {
                     val id = repo.requestRefresh(app)
@@ -60,6 +61,7 @@ object DevActions {
                 val a = repo.availability.value
                 logParts("dayglance", dump(a.dayGlanceFreshness, repo.refreshRequests.value[GlanceApp.DAYGLANCE]?.clientId, repo.dayGlanceWeatherForDump()))
                 logParts("lastglance", dump(a.lastGlanceFreshness, repo.refreshRequests.value[GlanceApp.LASTGLANCE]?.clientId))
+                if (a.thingGlanceInstalled) logParts("thingglance", dump(a.thingGlanceFreshness, repo.refreshRequests.value[GlanceApp.THINGGLANCE]?.clientId))
             }
         }
         return true

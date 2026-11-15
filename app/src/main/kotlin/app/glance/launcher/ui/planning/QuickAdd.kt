@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.glance.launcher.data.provider.GlanceApp
 import app.glance.launcher.intents.GlanceIntents
 import app.glance.launcher.quickadd.QuickAddParser
 import app.glance.launcher.ui.GlanceIcons
@@ -51,52 +52,60 @@ import app.glance.launcher.ui.LauncherController
 import app.glance.launcher.ui.common.LastGlanceGreen
 import app.glance.launcher.ui.theme.GlanceTheme
 
-/** What the planning screen's "+" adds. */
-enum class QuickAddKind { TASK, CHORE }
+/** What a planning page's "+" adds in a one-line sheet, and the [app] whose page draws that sheet. */
+enum class QuickAddKind(val app: GlanceApp) { TASK(GlanceApp.DAYGLANCE), CHORE(GlanceApp.LASTGLANCE) }
 
 /**
- * The planning screen's quick add: a "+" that opens Task, Chore and Person. Task and Chore take
- * one line in [QuickAddSheet] (a task through the same parser as search, so "dentist friday
- * 3pm" lands scheduled); Person opens lastGLANCE's own add-person form, since a person has
- * circles, dates and a cadence a one-line write would leave unset. Chore and Person show only
- * with lastGLANCE installed.
+ * A planning page's quick add: a "+" in the page's colour that adds what the page is about
+ * (D80). On dayGLANCE's page a tap opens the task sheet at once, since a task is all there is
+ * to add; on lastGLANCE's it opens a menu of Chore and Person, and is there only with lastGLANCE
+ * installed. Task and Chore take one line in [QuickAddSheet] (a task through the same parser as
+ * search, so "dentist friday 3pm" lands scheduled); Person opens lastGLANCE's own add-person
+ * form, since a person has circles, dates and a cadence a one-line write would leave unset.
  */
 @Composable
-fun QuickAddButton(controller: LauncherController, onPick: (QuickAddKind) -> Unit, modifier: Modifier = Modifier) {
+fun QuickAddButton(app: GlanceApp, controller: LauncherController, onPick: (QuickAddKind) -> Unit, modifier: Modifier = Modifier) {
     val c = GlanceTheme.colors
     val context = LocalContext.current
     val availability by controller.repository.availability.collectAsState()
-    var open by remember { mutableStateOf(false) }
-    Column(modifier, horizontalAlignment = Alignment.End) {
-        if (open) {
-            // As wide as its widest row, right-aligned over the button. The rows fill the
-            // menu's width so each is a full-width tap target, which without this intrinsic
-            // width stretched the menu across the screen with the labels at its far left.
-            Column(
-                Modifier
-                    .width(IntrinsicSize.Max)
-                    .widthIn(min = 180.dp)
-                    .background(c.card, RoundedCornerShape(14.dp))
-                    .border(1.dp, c.border, RoundedCornerShape(14.dp))
-                    .padding(vertical = 6.dp),
-            ) {
-                MenuItem(GlanceIcons.Plus, "Add task", c.brand) { open = false; onPick(QuickAddKind.TASK) }
-                if (availability.lastGlanceInstalled) {
-                    MenuItem(GlanceIcons.ListPlus, "Add chore", LastGlanceGreen) { open = false; onPick(QuickAddKind.CHORE) }
-                    MenuItem(GlanceIcons.UserPlus, "Add person", LastGlanceGreen) { open = false; GlanceIntents.addPerson(context) }
+    when (app) {
+        GlanceApp.DAYGLANCE -> AddButton(c.brand, GlanceIcons.Plus, "Add task", modifier) { onPick(QuickAddKind.TASK) }
+        GlanceApp.LASTGLANCE -> if (availability.lastGlanceInstalled) {
+            var open by remember { mutableStateOf(false) }
+            Column(modifier, horizontalAlignment = Alignment.End) {
+                if (open) {
+                    // As wide as its widest row, right-aligned over the button. The rows fill the
+                    // menu's width so each is a full-width tap target, which without this intrinsic
+                    // width stretched the menu across the screen with the labels at its far left.
+                    Column(
+                        Modifier
+                            .width(IntrinsicSize.Max)
+                            .widthIn(min = 180.dp)
+                            .background(c.card, RoundedCornerShape(14.dp))
+                            .border(1.dp, c.border, RoundedCornerShape(14.dp))
+                            .padding(vertical = 6.dp),
+                    ) {
+                        MenuItem(GlanceIcons.ListPlus, "Add chore", LastGlanceGreen) { open = false; onPick(QuickAddKind.CHORE) }
+                        MenuItem(GlanceIcons.UserPlus, "Add person", LastGlanceGreen) { open = false; GlanceIntents.addPerson(context) }
+                    }
+                    Spacer(Modifier.height(10.dp))
                 }
+                AddButton(LastGlanceGreen, if (open) GlanceIcons.Close else GlanceIcons.Plus, if (open) "Close" else "Add to lastGLANCE") { open = !open }
             }
-            Spacer(Modifier.height(10.dp))
         }
-        Box(
-            Modifier
-                .size(52.dp)
-                .background(c.brand, CircleShape)
-                .clickable { open = !open },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(if (open) GlanceIcons.Close else GlanceIcons.Plus, contentDescription = if (open) "Close" else "Add", tint = Color.White, modifier = Modifier.size(24.dp))
+        // A thing made from a name alone has no dates, and the dates are the point: the app's own form.
+        GlanceApp.THINGGLANCE -> {
+            val t = thingColors()
+            AddButton(t.accent, GlanceIcons.Plus, "Add a thing", modifier, tint = t.accentInk) { GlanceIntents.addThing(context) }
         }
+    }
+}
+
+/** The round "+" itself, in the page's colour. */
+@Composable
+private fun AddButton(color: Color, icon: ImageVector, description: String, modifier: Modifier = Modifier, tint: Color = Color.White, onClick: () -> Unit) {
+    Box(modifier.size(52.dp).background(color, CircleShape).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+        Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(24.dp))
     }
 }
 

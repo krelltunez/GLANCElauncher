@@ -3,6 +3,7 @@ package app.glance.launcher.ui.common
 import app.glance.launcher.data.Availability
 import app.glance.launcher.data.DataSource
 import app.glance.launcher.data.Freshness
+import app.glance.launcher.data.provider.GlanceApp
 import java.time.Duration
 import java.time.Instant
 import kotlin.test.Test
@@ -34,6 +35,39 @@ class DataStatusTest {
             dataStatusText(avail(Freshness(DataSource.DEMO), live(syncedAt = now.minus(Duration.ofDays(2)))), now),
         )
         assertEquals("lastGLANCE 3h", dataStatusText(avail(live(syncedAt = now.minusSeconds(30)), live(checkedAt = now.minus(Duration.ofHours(3)))), now))
+    }
+
+    @Test
+    fun `a planning page's header speaks for its own app only`() {
+        // dayGLANCE on demo data, lastGLANCE live but two days stale: each page says its own.
+        val a = avail(Freshness(DataSource.DEMO), live(syncedAt = now.minus(Duration.ofDays(2))))
+        assertEquals("demo data", appStatusText(a, GlanceApp.DAYGLANCE, now))
+        assertEquals("last confirmed 2d ago", appStatusText(a, GlanceApp.LASTGLANCE, now))
+        // Fresh says nothing (the label then reads "live"), however stale the other app is.
+        val b = avail(live(syncedAt = now.minusSeconds(600)), live(checkedAt = now.minus(Duration.ofHours(3))))
+        assertNull(appStatusText(b, GlanceApp.DAYGLANCE, now))
+        assertEquals("last confirmed 3h ago", appStatusText(b, GlanceApp.LASTGLANCE, now))
+        // The hour is the line, measured from the last confirmation as everywhere else.
+        assertNull(appStatusText(avail(live(syncedAt = now.minus(Duration.ofMinutes(59))), live()), GlanceApp.DAYGLANCE, now))
+        assertEquals("last confirmed 1h ago", appStatusText(avail(live(syncedAt = now.minus(Duration.ofMinutes(60))), live()), GlanceApp.DAYGLANCE, now))
+        assertEquals("not confirmed yet", appStatusText(avail(live(), live()), GlanceApp.LASTGLANCE, now))
+        // Not installed is demo data too: that is what the page shows.
+        assertEquals("demo data", appStatusText(avail(live(syncedAt = now), Freshness(DataSource.DEMO, installed = false)), GlanceApp.LASTGLANCE, now))
+    }
+
+    @Test
+    fun `the screenshot demo says nothing on either page`() {
+        val a = avail(Freshness(DataSource.DEMO, true), Freshness(DataSource.DEMO, true)).copy(demoForced = true)
+        assertNull(appStatusText(a, GlanceApp.DAYGLANCE, now))
+        assertNull(appStatusText(a, GlanceApp.LASTGLANCE, now))
+    }
+
+    @Test
+    fun `each app's freshness is its own`() {
+        val day = live(syncedAt = now.minusSeconds(5))
+        val last = live(checkedAt = now.minusSeconds(9))
+        assertEquals(day, avail(day, last).freshness(GlanceApp.DAYGLANCE))
+        assertEquals(last, avail(day, last).freshness(GlanceApp.LASTGLANCE))
     }
 
     @Test

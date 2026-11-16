@@ -27,6 +27,8 @@ interface GlanceRepository {
     val inboxCount: StateFlow<Int?>
     val chores: StateFlow<List<Chore>>
     val people: StateFlow<List<Person>>
+    /** lastGLANCE's chore completions per day over the last year, for its page's heatmap; empty when the app sends none. */
+    val choreActivity: StateFlow<Map<LocalDate, Int>>
     /**
      * thingGLANCE as its planning page shows it, or null when there is no page to show: the app
      * is not installed, is older than its launcher integration, or does not trust this build's
@@ -58,6 +60,9 @@ interface GlanceRepository {
     suspend fun restoreThingDate(event: ThingEvent)
     /** Hands the date to dayGLANCE as a task; it stays in view, marked as sent. */
     suspend fun sendThingDate(event: ThingEvent)
+
+    /** The date turned over while the launcher was up: what depends on today (a chore's season) is worked out again. */
+    fun dayChanged() {}
 
     /** [app]'s planning page came into view: a chance to ask for fresher data than the return to Home did. */
     suspend fun planningShown(app: app.glance.launcher.data.provider.GlanceApp) {}

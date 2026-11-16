@@ -181,7 +181,22 @@ data class Chore(
     val icon: String? = null,
     /** Pinned and in season, as lastGLANCE's Pinned row shows it; false from a lastGLANCE that predates pinning. */
     val pinned: Boolean = false,
-)
+    /**
+     * lastGLANCE's seasonal window, month and day to month and day; a start after its end wraps
+     * the new year. Null for a chore that is always in season, and from a lastGLANCE that sends
+     * none. Out of season the app lists the chore nowhere, and neither does the launcher (D82).
+     */
+    val seasonalStart: java.time.MonthDay? = null,
+    val seasonalEnd: java.time.MonthDay? = null,
+) {
+    /** lastGLANCE's `isInSeasonalWindow`: both ends count, and half a window is no window. */
+    fun inSeason(today: LocalDate): Boolean {
+        val start = seasonalStart ?: return true
+        val end = seasonalEnd ?: return true
+        val day = java.time.MonthDay.from(today)
+        return if (start <= end) day >= start && day <= end else day >= start || day <= end
+    }
+}
 
 data class Person(
     val id: String,
@@ -222,6 +237,22 @@ object Cadence {
     fun ratio(elapsedDays: Double?, cadenceDays: Int?): Double? {
         if (elapsedDays == null || cadenceDays == null || cadenceDays <= 0) return null
         return elapsedDays / cadenceDays
+    }
+
+    /** Someone with no contact logged counts as this long ago, so a cadence makes them due at once. */
+    const val NEVER_CONTACTED_DAYS = 999.0
+
+    /**
+     * How far through their cadence a person is, null when they have none. Unlike a chore never
+     * done, a person never contacted is overdue: Reach out and the circles' lists both go by this.
+     */
+    fun reachRatio(person: Person, now: Instant): Double? =
+        ratio(elapsedDays(person.lastInteractionAt, now) ?: NEVER_CONTACTED_DAYS, person.targetCadenceDays)
+
+    /** Whether lastGLANCE would list [person] under Reach out now. */
+    fun reachOut(person: Person, now: Instant): Boolean {
+        val ratio = reachRatio(person, now) ?: return false
+        return !person.isSnoozed(now) && (ratio >= ATTENTION_RATIO || (person.unreturned && ratio >= 0.5))
     }
 
     /**

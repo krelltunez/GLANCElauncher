@@ -102,6 +102,8 @@ data class LastGlanceSnapshot(
     val handledWrites: List<HandledWrite>,
     val createdClientIds: Set<String>,
     val meta: AppMeta = AppMeta.EMPTY,
+    /** Chore completions per local day over the last year, for the heatmap; empty from a lastGLANCE that sends none. */
+    val completionsByDay: Map<LocalDate, Int> = emptyMap(),
 ) {
     val reflected: Set<String> get() = handledWrites.mapTo(HashSet()) { it.clientId } + createdClientIds
 }
@@ -143,7 +145,20 @@ object SnapshotParser {
             handledWrites = handledWrites(meta),
             createdClientIds = chores.mapNotNullTo(HashSet()) { it.str("clientId") },
             meta = appMeta(meta),
+            completionsByDay = completionsByDay(meta),
         )
+    }
+
+    /** `meta.completionsByDay`: a count per "YYYY-MM-DD"; an unreadable day is skipped. */
+    private fun completionsByDay(meta: JSONObject?): Map<LocalDate, Int> {
+        val o = meta?.optJSONObject("completionsByDay") ?: return emptyMap()
+        val out = HashMap<LocalDate, Int>()
+        for (key in o.keys()) {
+            val day = date(key) ?: continue
+            val count = o.optInt(key, 0)
+            if (count > 0) out[day] = count
+        }
+        return out
     }
 
     // region dayGLANCE rows
@@ -272,6 +287,8 @@ object SnapshotParser {
             lastDoneAt = instant(o.str("lastDoneAt")),
             icon = o.str("icon"),
             pinned = o.optBoolean("pinned", false),
+            seasonalStart = monthDay(o.str("seasonalStart")),
+            seasonalEnd = monthDay(o.str("seasonalEnd")),
         )
     }
 
@@ -306,6 +323,9 @@ object SnapshotParser {
             snoozedUntil = instant(o.str("snoozedUntil")),
         )
     }
+
+    /** lastGLANCE's "MM-DD". */
+    private fun monthDay(s: String?): MonthDay? = if (s == null) null else try { MonthDay.parse("--$s") } catch (e: Exception) { null }
 
     private fun dateLabel(d: JSONObject): String = when (d.str("kind")) {
         "birthday" -> "Birthday"

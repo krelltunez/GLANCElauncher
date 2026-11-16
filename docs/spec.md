@@ -43,7 +43,8 @@ the dial a third of the width, so the dial gets the height on every size and pla
 swipe (D17). No user screens to the right of Home. While a planning page is in front a small
 pill at the foot of the page, above the taskbar or the navigation bar, shows one dot per
 planning page in the app's colour, in the order the pages sit, the page in front filled; a tap
-on a dot goes to its page. It fades out towards Home, which has no dot. The pill and each
+on a dot goes to its page. After the dots, at the end Home is on, a house goes back to Home
+(D82). The pill fades out towards Home, where it is not shown. The pill and each
 page's "+" float over the page; every column ends with a blank foot tall enough for its last
 row to scroll clear of both. The order of the pages
 is `PlanningPages`, a pure object: the list of apps can change while the launcher runs, and
@@ -89,8 +90,8 @@ opens the drawer.
 
 **Tablet landscape.** The dial fills the height on the left in a rounded dark panel, its width
 capped so the column beside it keeps at least 560 dp. The column, top to bottom: the header
-(the GLANCElauncher wordmark, each app's icon with its data-status badge, which goes to that
-app's planning page, lock and settings glyphs; D44, D45, D80); the **All day & deadlines** pill (all-day items behind a
+(the GLANCElauncher wordmark, each app's icon with its data-status badge, which opens that
+app, lock and settings glyphs; D44, D45, D82); the **All day & deadlines** pill (all-day items behind a
 calendar glyph, deadlines due within a week behind a calendar-clock glyph, as rose chips with
 "in 2d"); the **breakdown legend** in a fixed two-row order (Effort, Restore, Sleep, Focus;
 Done, Routines, Frames, Unblocked, dashes for missing data) (D18, D21); the **week strip**,
@@ -180,10 +181,15 @@ routine pills, the uniform two-line card, the filter sheet, whose selections are
 (cards with progress). The "+" is orange and opens the one-line task sheet at once (through
 the search parser).
 
-**lastGLANCE's page**: pinned chores (D68), due now and due soon chores (the app's ChoreRow
-with the cadence fill), Coming up (the People home's date tiles) and Reach out (D25). The "+"
-is green and offers a chore (one line) or a person (in lastGLANCE's own form) (D41); it is
-there only with lastGLANCE installed.
+**lastGLANCE's page** (D82): the app's header heatmap at the top, a column a week and a cell
+a day, greener the more chores were logged, as many of the latest weeks as the width holds.
+Then chores: pinned (D68), due now and due soon (the app's ChoreRow with the cadence fill),
+and every category with all of its chores. Then people, under a People header: Coming up (the
+People home's date tiles), Reach out (D25), and every circle with everyone in it. A category
+or a circle folds away on a tap and the launcher remembers which are folded; folded, it shows
+a dot when something in it is due. A chore that is out of season is listed nowhere, as in the
+app. The "+" is green and offers a chore (one line) or a person (in lastGLANCE's own form)
+(D41); it is there only with lastGLANCE installed.
 
 **thingGLANCE's page** (D81), when the app is installed: a port of the app's Glance screen.
 The headline panel (the day and a status word, how many dates want a decision, the first of
@@ -198,13 +204,15 @@ open the app once.
 
 **Tablet landscape**: the header across the top and two columns under it, each scrolling on
 its own. dayGLANCE: month and agenda on the left, Goals and Projects on the right. lastGLANCE:
-chores (Pinned, Due) on the left, people (Coming up, four across, and Reach out) on the right.
+the heatmap and chores (Pinned, Due, every category) on the left, people (Coming up, four
+across, Reach out, every circle) on the right.
 thingGLANCE: the headline panel and what needs a decision on the left, the Fleet and plan
 charges on the right. The agenda's column ends with a Back to top row.
 
 **Tablet portrait and phone**: one column per page. On dayGLANCE's, jump chips at the end of
 the SCHED controls row (Goals, Projects), up arrows in those two headers, and a Back to top
-row at the foot (D26); lastGLANCE's ends with the Back to top row. On a phone the month cells
+row at the foot (D26). On lastGLANCE's, a People chip under the heatmap jumps down to the
+People header, which has the up arrow back, and the page ends with the Back to top row. On a phone the month cells
 are 10:7 rather than square, the controls chips tighten to stay on one line, project cards go
 full width and the Coming up tiles are the app's three across, nine at most.
 
@@ -307,8 +315,9 @@ launcher's models, not the widgets': dayGLANCE tasks with id, title, date, start
 all-day, completed and completed-at, colour, priority, notes, project id, deadline, source and
 energy; goals; projects; routines with completion dates; frames with their weekdays; the day
 shape (awake window, sun times, 24-hour setting). lastGLANCE: chores with category, cadence,
-last done and icon name; people with circle, cadence, last interaction and channel,
-reciprocity and their dates. Every snapshot carries `updatedAt`. A read-only `ContentProvider`
+last done, icon name and season; people with circle, cadence, last interaction and channel,
+reciprocity and their dates; and, in its meta row, a year of chore completions a day for the
+heatmap. Every snapshot carries `updatedAt`. A read-only `ContentProvider`
 per app (`content://com.dayglance.app.launcher/<collection>`,
 `content://com.lastglance.app.launcher/<collection>`) serves one URI per collection as a
 cursor of JSON rows, and the push calls `notifyChange`, so the launcher's `ContentObserver`

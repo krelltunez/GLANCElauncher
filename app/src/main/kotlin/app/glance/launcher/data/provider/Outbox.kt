@@ -108,6 +108,15 @@ object Outbox {
         return out
     }
 
+    /** The heatmap's counts with each chore logged here and not yet seen by the app counted on its day. */
+    fun applyToActivity(counts: Map<LocalDate, Int>, entries: List<OutboxEntry>, zone: java.time.ZoneId): Map<LocalDate, Int> {
+        val logged = entries.mapNotNull { (it.patch as? Patch.LogChore)?.at?.atZone(zone)?.toLocalDate() }
+        if (logged.isEmpty()) return counts
+        val out = HashMap(counts)
+        for (day in logged) out[day] = (out[day] ?: 0) + 1
+        return out
+    }
+
     fun applyToPeople(people: List<Person>, entries: List<OutboxEntry>): List<Person> {
         var out = people
         for (e in entries) {

@@ -167,8 +167,8 @@ fun LauncherRoot(graph: AppGraph, homePressCount: Int, foregroundCount: Int = 0)
 
 /**
  * The page indicator over the pager (D80): there while a planning page is in view, and fading
- * with the swipe so that it is gone on Home, which has no dot. It is not composed at all on
- * Home, where it would take taps meant for what is under it, nor under a quick-add sheet. The
+ * with the swipe so that it is gone on Home, the page its house goes back to. It is not composed
+ * at all on Home, where it would take taps meant for what is under it, nor under a quick-add sheet. The
  * fade is read in the draw phase, so a swipe redraws the pill without recomposing the root.
  */
 @Composable
@@ -182,6 +182,7 @@ private fun PlanningIndicator(pager: PagerState, apps: List<GlanceApp>, controll
         apps = apps,
         current = PlanningPages.appAt(pager.currentPage, apps),
         onPick = { app -> PlanningPages.indexOf(app, apps)?.let { scope.launch { pager.animateScrollToPage(it) } } },
+        onHome = { scope.launch { pager.animateScrollToPage(PlanningPages.HOME) } },
         modifier = modifier.graphicsLayer { alpha = fromHome().coerceIn(0f, 1f) },
     )
 }

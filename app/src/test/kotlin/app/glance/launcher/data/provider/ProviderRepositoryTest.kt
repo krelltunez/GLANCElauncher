@@ -290,6 +290,26 @@ class ProviderRepositoryTest {
     }
 
     @Test
+    fun `a chore out of season is listed nowhere, and the heatmap counts a chore logged here`() = runBlocking {
+        client.installed[GlanceApp.LASTGLANCE] = true
+        // 19 October: Mow's season ended in September, Rake's runs to the end of November.
+        client.rows[GlanceApp.LASTGLANCE] = lastRows().toMutableMap().also { rows ->
+            rows["meta"] = listOf("""{"version":1,"updatedAt":${now.toEpochMilli()},"today":"2026-10-19","handledWrites":[],"completionsByDay":{"2026-10-19":2,"2026-10-12":1}}""")
+            rows["chores"] = listOf(
+                """{"id":"c1","name":"Vacuum","category":"Kitchen","targetCadenceDays":7,"lastDoneAt":"2026-10-10T12:00:00.000Z"}""",
+                """{"id":"c2","name":"Mow","category":"Garden","targetCadenceDays":7,"lastDoneAt":"2026-08-01T12:00:00.000Z","seasonalStart":"04-01","seasonalEnd":"09-30"}""",
+                """{"id":"c3","name":"Rake","category":"Garden","targetCadenceDays":7,"lastDoneAt":null,"seasonalStart":"10-01","seasonalEnd":"11-30"}""",
+            )
+        }
+        val r = repo()
+        r.refreshAll()
+        assertEquals(listOf("Vacuum", "Rake"), r.chores.value.map { it.name })
+        assertEquals(mapOf(today to 2, today.minusDays(7) to 1), r.choreActivity.value)
+        r.logChoreDone("c1")
+        assertEquals(3, r.choreActivity.value[today])
+    }
+
+    @Test
     fun `lastGLANCE writes name the chore and person by id`() = runBlocking {
         client.installed[GlanceApp.LASTGLANCE] = true
         client.rows[GlanceApp.LASTGLANCE] = lastRows()

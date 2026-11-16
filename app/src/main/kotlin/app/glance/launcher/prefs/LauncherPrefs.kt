@@ -125,6 +125,19 @@ class LauncherPrefs(context: Context) {
         _use24HourClock.value = value
     }
 
+    /**
+     * The categories and circles folded away on lastGLANCE's planning page (D82), by
+     * `chores:<category>` and `people:<circle>`. Everything is open until it is folded.
+     */
+    private val _lastGlanceFolded = MutableStateFlow(sp.getStringSet(KEY_LASTGLANCE_FOLDED, emptySet())!!.toSet())
+    val lastGlanceFolded: StateFlow<Set<String>> = _lastGlanceFolded.asStateFlow()
+
+    fun setLastGlanceFolded(key: String, folded: Boolean) {
+        val next = if (folded) _lastGlanceFolded.value + key else _lastGlanceFolded.value - key
+        sp.edit().putStringSet(KEY_LASTGLANCE_FOLDED, next).commit()
+        _lastGlanceFolded.value = next
+    }
+
     fun setHidden(componentKey: String, hidden: Boolean) {
         val next = if (hidden) _hiddenApps.value + componentKey else _hiddenApps.value - componentKey
         sp.edit().putStringSet(KEY_HIDDEN, next).commit()
@@ -277,6 +290,7 @@ class LauncherPrefs(context: Context) {
         _dockEnabled.value = sp.getBoolean(KEY_DOCK, true)
         _dockShowsRecents.value = sp.getBoolean(KEY_DOCK_RECENTS, false)
         _hiddenApps.value = sp.getStringSet(KEY_HIDDEN, emptySet())!!.toSet()
+        _lastGlanceFolded.value = sp.getStringSet(KEY_LASTGLANCE_FOLDED, emptySet())!!.toSet()
         _homePins.value = readList(KEY_HOME_PINS)
         _dockPins.value = readList(KEY_DOCK_PINS)
         _use24HourClock.value = if (sp.contains(KEY_24H)) sp.getBoolean(KEY_24H, false) else null
@@ -339,5 +353,6 @@ class LauncherPrefs(context: Context) {
         const val KEY_DIAL_LOCKED = "dial_locked"
         const val KEY_HIDE_STATUS_BAR = "hide_status_bar"
         const val KEY_WALLPAPER_ARGB = "wallpaper_argb"
+        const val KEY_LASTGLANCE_FOLDED = "lastglance_folded"
     }
 }

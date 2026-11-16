@@ -42,6 +42,7 @@ object SettingsBackup {
         LauncherPrefs.KEY_SCHED_VIEW to Field(Kind.STRING),
         LauncherPrefs.KEY_LAUNCH_HISTORY to Field(Kind.STRING),
         LauncherPrefs.KEY_RECENT_SEARCHES to Field(Kind.LIST),
+        LauncherPrefs.KEY_LASTGLANCE_FOLDED to Field(Kind.SET),
     )
 
     /** Keys that are bookkeeping rather than settings: the wallpaper colour last applied on THIS device. */

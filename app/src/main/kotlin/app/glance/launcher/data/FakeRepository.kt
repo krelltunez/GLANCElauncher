@@ -32,6 +32,7 @@ class FakeRepository(
     private val _weather = MutableStateFlow(seed.weather)
     private val _chores = MutableStateFlow(seed.chores)
     private val _people = MutableStateFlow(seed.people)
+    private val _choreActivity = MutableStateFlow(seed.choreActivity)
     private val _thingGlance = MutableStateFlow<ThingGlanceData?>(seed.thingGlance)
     private val _availability = MutableStateFlow(Availability(dayGlanceInstalled = true, lastGlanceInstalled = true))
 
@@ -46,6 +47,7 @@ class FakeRepository(
     override val inboxCount: StateFlow<Int?> = MutableStateFlow<Int?>(null).asStateFlow()
     override val chores: StateFlow<List<Chore>> = _chores.asStateFlow()
     override val people: StateFlow<List<Person>> = _people.asStateFlow()
+    override val choreActivity: StateFlow<Map<LocalDate, Int>> = _choreActivity.asStateFlow()
     override val thingGlance: StateFlow<ThingGlanceData?> = _thingGlance.asStateFlow()
     override val availability: StateFlow<Availability> = _availability.asStateFlow()
 
@@ -64,6 +66,7 @@ class FakeRepository(
         _weather.value = seed.weather
         _chores.value = seed.chores
         _people.value = seed.people
+        _choreActivity.value = seed.choreActivity
         _thingGlance.value = seed.thingGlance
     }
 
@@ -131,6 +134,8 @@ class FakeRepository(
     override suspend fun logChoreDone(choreId: String) {
         val now = clock.instant()
         _chores.update { list -> list.map { if (it.id == choreId) it.copy(lastDoneAt = now) else it } }
+        val day = LocalDate.now(clock)
+        _choreActivity.update { it + (day to (it[day] ?: 0) + 1) }
     }
 
     override suspend fun addChore(name: String): Chore {
@@ -321,6 +326,26 @@ class FakeSeed(val today: LocalDate, val now: Instant, val zone: ZoneId) {
         Person("person-jo", "Jo Whitfield", "Jo", "Work", 21, daysAgo(5, 16), "video", specialDate = java.time.MonthDay.from(today.plusDays(25)), specialLabel = "Work anniversary"),
         Person("person-aunt", "Aunt Ruth", null, "Family", 60, null, null),
     )
+
+    /**
+     * A year of chore completions for the heatmap: most days one or two, a few busy days, and
+     * quiet stretches, from a fixed pattern so the demo looks the same every run.
+     */
+    val choreActivity: Map<LocalDate, Int> = buildMap {
+        for (ago in 0L..370L) {
+            val day = today.minusDays(ago)
+            val n = ((ago * 7 + day.dayOfWeek.value * 3) % 11).toInt()
+            val count = when {
+                (ago / 9) % 7 == 3L -> 0
+                n < 4 -> 0
+                n < 7 -> 1
+                n < 9 -> 2
+                n == 9 -> 3
+                else -> 5
+            }
+            if (count > 0) put(day, count)
+        }
+    }
 
     /** thingGLANCE's page for the screenshot demo: a small household's things, dates and plans. */
     val thingGlance: ThingGlanceData = run {

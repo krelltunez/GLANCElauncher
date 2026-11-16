@@ -871,3 +871,45 @@ entries by number, so the numbers never change. Files and pull requests named "i
     cold), at a live one, and a write to a backgrounded app whose page had stopped answering
     (thingGLANCE closed the page and applied it from a background run). Not checked: Send to
     dayGLANCE (needs a vault and both apps connected), a tablet, a real phone's battery rules.
+
+82. **The lastGLANCE page grows into the app's own, and the header icons open apps again.**
+    Five things from living with the three pages.
+
+    Home's header icons open their app, as they did before decision 80. Going to the planning
+    page instead put two ways to the same place (the swipe and the dots already go there) in
+    front of the one thing an app's icon is for. The page's wordmark still opens the app too.
+
+    lastGLANCE's page is headed by the app's heatmap: 52 weeks of chore completions in the
+    app, a column a week and a cell a day, here as many of the latest weeks as the width holds
+    at the app's cell size, stretched to fill it. The app hides its heatmap on a phone; the
+    launcher shows about 25 weeks there. The greens are the app's; on a light theme their
+    order is turned round, so the busiest day is the strongest cell on either. A chore logged
+    from the launcher counts on its day at once. lastGLANCE sends the counts in its meta row
+    (`completionsByDay`), not as a collection of its own, so a launcher from before them is
+    not asked for a collection it does not know, and a lastGLANCE from before them simply
+    gets no heatmap.
+
+    The page lists everything, not only what is due. Under Pinned and Due come every category
+    with all of its chores, and under Coming up and Reach out every circle with everyone in
+    it, in the app's own order of both. Each folds away on a tap, open until folded, and the
+    launcher remembers which are folded (`LauncherPrefs.lastGlanceFolded`, in the settings
+    file). A folded one shows a dot in the colour of its most pressing chore or person, as
+    the app's collapsed category does. With the chores this long, People is far down a phone:
+    a People chip under the heatmap jumps to it, and People has a header of its own, like
+    Goals and Projects, with the arrow back to the top. In tablet landscape people are the
+    other column, so there is no chip and no arrow.
+
+    A chore out of season is listed nowhere. lastGLANCE hides one from its own lists, but
+    sent it to the launcher like any other, with no word of its season, and the launcher
+    called a mowing chore "due now" in the middle of November. lastGLANCE now leaves
+    out-of-season chores out of the snapshot, which fixes it for every launcher, and sends
+    each listed chore's season, so that this launcher drops one the day its season ends
+    (`Chore.inSeason`, applied in the repository and again when the date turns) without
+    waiting for the app. One coming into season appears with the app's next snapshot.
+
+    The pill at the foot of a planning page ends in a house that goes back to Home. Home had
+    no dot because the pill is not shown there, which left the page three swipes from Home
+    with nothing on screen that said so. The house sits after the last dot, the end Home is
+    on, so the pill reads in the order the pages sit.
+
+    thingGLANCE's page is unchanged.

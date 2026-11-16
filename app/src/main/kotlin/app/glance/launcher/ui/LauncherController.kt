@@ -116,6 +116,8 @@ class LauncherController(val graph: AppGraph, private val scope: CoroutineScope)
         if (now == old) return
         val next = DayRollover.follow(DayRollover.Days(dialDate, planningMonth, planningSelectedDay), old, now)
         today = now
+        // A chore's season can end with the day (D82).
+        repository.dayChanged()
         dialDate = next.dial
         planningMonth = next.planningMonth
         planningSelectedDay = next.planningSelected

@@ -163,33 +163,144 @@ private fun DayGlancePage(controller: LauncherController, modifier: Modifier) {
     }
 }
 
-/** Chores (Pinned, Due), then people (Coming up, Reach out): below them in one column, beside them in tablet landscape. */
+/**
+ * The heatmap, then chores (Pinned, Due, every category), then people (Coming up, Reach out,
+ * every circle): one below the other in one column, chores beside people in tablet landscape (D82).
+ */
 @Composable
 private fun LastGlancePage(controller: LauncherController, modifier: Modifier) {
+    val context = LocalContext.current
     val chores by controller.repository.chores.collectAsState()
     val people by controller.repository.people.collectAsState()
+    val activity by controller.repository.choreActivity.collectAsState()
+    val heatmap: @Composable () -> Unit = {
+        // A lastGLANCE that sends no counts gets no empty grid in their place.
+        if (activity.isNotEmpty()) {
+            ChoreHeatmap(activity, controller.today) { GlanceIntents.launchLastGlance(context) }
+            Spacer(Modifier.height(12.dp))
+        }
+    }
     PageFrame(GlanceApp.LASTGLANCE, controller, modifier) { landscape, compact ->
         val jumps = rememberColumnJumps()
         if (landscape) {
+            // People is the other column, in view beside the chores: nothing to jump to or back from.
             TwoColumns(
                 GlanceApp.LASTGLANCE, controller, jumps.scroll,
                 left = {
                     Spacer(Modifier.height(4.dp))
+                    heatmap()
                     ChoresSection(controller, chores)
+                    ChoreCategories(controller, chores)
                 },
                 right = {
                     Spacer(Modifier.height(4.dp))
+                    PeopleHeader(jumps = null)
                     PeopleSection(controller, people, compact)
+                    PeopleCircles(controller, people)
                 },
             )
         } else {
             OneColumn(GlanceApp.LASTGLANCE, controller, compact, jumps.scroll) {
                 Spacer(Modifier.height(4.dp))
+                heatmap()
+                // People is a long way down once every category is listed: one tap there.
+                Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.End) {
+                    JumpChip("People") { jumps.toPeople() }
+                }
                 ChoresSection(controller, chores)
-                Spacer(Modifier.height(16.dp))
-                PeopleSection(controller, people, compact)
+                ChoreCategories(controller, chores)
+                Spacer(Modifier.height(20.dp))
+                Column(Modifier.onGloballyPositioned { jumps.peopleY = it.positionInParent().y }) {
+                    PeopleHeader(jumps)
+                    PeopleSection(controller, people, compact)
+                    PeopleCircles(controller, people)
+                }
                 Spacer(Modifier.height(16.dp))
                 BackToTopRow(jumps)
+            }
+        }
+    }
+}
+
+/** The bordered chip that jumps down the column, in the agenda's controls style. */
+@Composable
+private fun JumpChip(label: String, onClick: () -> Unit) {
+    val c = GlanceTheme.colors
+    val shape = RoundedCornerShape(8.dp)
+    Row(
+        Modifier.clip(shape).border(1.dp, c.border, shape).clickable(onClickLabel = "Jump to $label", role = Role.Button, onClick = onClick).padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(GlanceIcons.ArrowDown, null, tint = c.textSecondary, modifier = Modifier.size(13.dp))
+        Text(label, color = c.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+    }
+}
+
+/** The People part's own header, as Goals and Projects have: the way back to the top, and into the app's People. */
+@Composable
+private fun PeopleHeader(jumps: ColumnJumps?) {
+    val c = GlanceTheme.colors
+    val context = LocalContext.current
+    SectionHeader("People") {
+        if (jumps != null) {
+            TopArrow(jumps)
+            Spacer(Modifier.width(12.dp))
+        }
+        Text("People", color = c.accent, fontSize = 11.sp, modifier = Modifier.clickable { GlanceIntents.openPeople(context) })
+    }
+    Spacer(Modifier.height(12.dp))
+}
+
+/**
+ * Every chore, under its category, in the app's own order of both. Each category folds away,
+ * and the launcher remembers which are folded; a folded one shows a dot in the colour of its
+ * most pressing chore when one is due or due soon.
+ */
+@Composable
+private fun ChoreCategories(controller: LauncherController, chores: List<Chore>) {
+    val folded by controller.graph.prefs.lastGlanceFolded.collectAsState()
+    val nowMin = rememberNowMinute()
+    val now = remember(chores, nowMin, controller.today) { Instant.now() }
+    val groups = remember(chores) { LastGlanceLists.grouped(chores) { it.category } }
+    if (groups.isEmpty()) return
+    Spacer(Modifier.height(16.dp))
+    for ((category, list) in groups) {
+        val key = LastGlanceLists.choresKey(category)
+        val ratios = list.associateWith { Cadence.ratio(Cadence.elapsedDays(it.lastDoneAt, now), it.targetCadenceDays) }
+        val worst = ratios.values.filterNotNull().maxOrNull()
+        val pressing = worst != null && Cadence.state(worst).let { it == CadenceState.OVERDUE || it == CadenceState.DUE_SOON }
+        FoldHeader(category.ifEmpty { "No category" }, list.size, key in folded, if (pressing) Color(Cadence.colorArgb(worst)) else null) {
+            controller.graph.prefs.setLastGlanceFolded(key, key !in folded)
+        }
+        if (key !in folded) {
+            Column(Modifier.padding(top = 2.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (ch in list) ChoreRow(ch, ratios[ch], now, controller)
+            }
+        }
+    }
+}
+
+/** Everyone, under their circle, as [ChoreCategories] lists every chore. A folded circle's dot is for someone to reach out to. */
+@Composable
+private fun PeopleCircles(controller: LauncherController, people: List<Person>) {
+    val folded by controller.graph.prefs.lastGlanceFolded.collectAsState()
+    val nowMin = rememberNowMinute()
+    val now = remember(people, nowMin, controller.today) { Instant.now() }
+    val groups = remember(people) { LastGlanceLists.grouped(people) { it.circle } }
+    if (groups.isEmpty()) return
+    Spacer(Modifier.height(16.dp))
+    for ((circle, list) in groups) {
+        val key = LastGlanceLists.peopleKey(circle)
+        val ratios = list.associateWith { Cadence.reachRatio(it, now) }
+        // The dot is for someone Reach out would list, in the colour of the one waiting longest.
+        val worst = list.filter { Cadence.reachOut(it, now) }.mapNotNull { ratios[it] }.maxOrNull()
+        val pressing = worst != null
+        FoldHeader(circle.ifEmpty { "No circle" }, list.size, key in folded, if (pressing) Color(Cadence.colorArgb(worst)) else null) {
+            controller.graph.prefs.setLastGlanceFolded(key, key !in folded)
+        }
+        if (key !in folded) {
+            Column(Modifier.padding(top = 2.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (p in list) PersonRow(p, ratios[p], now, controller)
             }
         }
     }
@@ -318,6 +429,9 @@ private fun PlanningHeader(app: GlanceApp, controller: LauncherController) {
 class ColumnJumps(val scroll: ScrollState, private val scope: CoroutineScope) {
     var goalsY by mutableFloatStateOf(0f)
     var projectsY by mutableFloatStateOf(0f)
+    /** Where lastGLANCE's People part starts, in its one column. */
+    var peopleY by mutableFloatStateOf(0f)
+    fun toPeople() { scope.launch { scroll.animateScrollTo(peopleY.roundToInt()) } }
     fun toGoals() { scope.launch { scroll.animateScrollTo(goalsY.roundToInt()) } }
     fun toProjects() { scope.launch { scroll.animateScrollTo(projectsY.roundToInt()) } }
     fun toTop() { scope.launch { scroll.animateScrollTo(0) } }
@@ -602,19 +716,14 @@ private fun PeopleSection(controller: LauncherController, people: List<Person>, 
     ComingUpSection(people, controller, compact)
 
     Spacer(Modifier.height(16.dp))
-    val reachOut = people.map { p ->
-        val el = Cadence.elapsedDays(p.lastInteractionAt, now) ?: 999.0
-        val ratio = Cadence.ratio(el, p.targetCadenceDays)
-        Triple(p, el, ratio)
-    }.filter { (p, _, ratio) -> !p.isSnoozed(now) && ratio != null && (ratio >= Cadence.ATTENTION_RATIO || (p.unreturned && ratio >= 0.5)) }
-        .sortedByDescending { it.third ?: 0.0 }
+    val reachOut = people.filter { Cadence.reachOut(it, now) }.map { it to Cadence.reachRatio(it, now) }.sortedByDescending { it.second ?: 0.0 }
     SectionHeader("Reach out · ${reachOut.size}") {
         Icon(GlanceIcons.Users, contentDescription = null, tint = c.textSecondary, modifier = Modifier.size(14.dp).clickable { GlanceIntents.openPeople(context) })
     }
     Spacer(Modifier.height(8.dp))
     if (reachOut.isEmpty()) Text("No one is waiting on a hello.", color = c.textMuted, fontSize = 13.sp)
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        for ((p, _, ratio) in reachOut.take(5)) PersonRow(p, ratio, now, controller)
+        for ((p, ratio) in reachOut.take(5)) PersonRow(p, ratio, now, controller)
     }
 }
 

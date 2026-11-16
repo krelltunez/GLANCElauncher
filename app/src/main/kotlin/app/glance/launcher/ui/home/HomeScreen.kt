@@ -81,6 +81,7 @@ import app.glance.daydial.computeBreakdown
 import app.glance.launcher.data.Cadence
 import app.glance.launcher.data.CadenceState
 import app.glance.launcher.data.Task
+import app.glance.launcher.data.provider.GlanceApp
 import app.glance.launcher.intents.GlanceIntents
 import app.glance.launcher.ui.GlanceIcons
 import app.glance.launcher.ui.LauncherController
@@ -473,23 +474,32 @@ private fun HomeHeader(controller: LauncherController) {
         LauncherWordmark(size = 20.dp)
         val availability by controller.repository.availability.collectAsState()
         Spacer(Modifier.weight(1f))
-        // One tap to each app's planning page, by the app's own launcher icon (D80); an app that
-        // is not installed has none. The page's wordmark is what opens the app. The icon carries
-        // the app's data status: an amber dot once its data is past STALE_AFTER (or demo), which
-        // the page's header then says in words. Long-press for diagnostics; Settings has the
+        // One tap into each app, by its own launcher icon; an app that is not installed has none.
+        // (For a release the icons went to the app's planning page instead, D80; a swipe and the
+        // page dots do that, and opening the app is what an app's icon is for, D82.) The icon
+        // carries the app's data status: an amber dot once its data is stale (or demo), which
+        // the app's planning page says in words. Long-press for diagnostics; Settings has the
         // status too. The header row has no room left for it as text.
         val apps by controller.graph.apps.apps.collectAsState()
+        val context = LocalContext.current
         val now = Instant.now()
-        for (app in PlanningPages.apps(availability)) {
+        for (app in GlanceApp.values()) {
             val name = PlanningPages.name(app)
             val entry = apps.firstOrNull { it.packageName == app.packageName } ?: continue
+            val open = {
+                when (app) {
+                    GlanceApp.DAYGLANCE -> GlanceIntents.launchDayGlance(context)
+                    GlanceApp.LASTGLANCE -> GlanceIntents.launchLastGlance(context)
+                    GlanceApp.THINGGLANCE -> GlanceIntents.launchThingGlance(context)
+                }
+            }
             // The screenshot demo hides the badge: a clean header (Settings says it is on).
             val word = if (availability.demoForced) null else appStatusWord(availability.freshness(app), now, app.staleAfter)
             Box(
                 Modifier
                     .size(34.dp)
-                    .combinedClickable(onClick = { controller.showPlanning(app) }, onLongClick = { controller.diagnosticsOpen = true })
-                    .semantics { contentDescription = if (word == null) "$name planning" else "$name planning, data $word" },
+                    .combinedClickable(onClick = open, onLongClick = { controller.diagnosticsOpen = true })
+                    .semantics { contentDescription = if (word == null) "Open $name" else "Open $name, data $word" },
                 contentAlignment = Alignment.Center,
             ) {
                 AppIcon(entry, controller.graph.apps, size = 26.dp)
@@ -571,9 +581,7 @@ fun lastGlanceStats(chores: List<app.glance.launcher.data.Chore>, people: List<a
     val attention = scored.filter { it.state == CadenceState.OVERDUE || it.state == CadenceState.DUE_SOON }.sortedByDescending { it.ratio ?: 0.0 }
     val doneToday = chores.count { it.lastDoneAt != null && it.lastDoneAt.atZone(java.time.ZoneId.systemDefault()).toLocalDate() == today }
     val scoredPeople = people.map { p ->
-        val ratio = Cadence.ratio(Cadence.elapsedDays(p.lastInteractionAt, now) ?: 999.0, p.targetCadenceDays)
-        val reach = !p.isSnoozed(now) && ratio != null && (ratio >= Cadence.ATTENTION_RATIO || (p.unreturned && ratio >= 0.5))
-        ScoredPerson(p, ratio, reach, p.daysUntilSpecial(today))
+        ScoredPerson(p, Cadence.reachRatio(p, now), Cadence.reachOut(p, now), p.daysUntilSpecial(today))
     }
     val reachOut = scoredPeople.filter { it.reachOut || (it.daysUntilSpecial != null && it.daysUntilSpecial <= 7) }
         .sortedWith(compareBy<ScoredPerson>({ !(it.daysUntilSpecial != null && it.daysUntilSpecial <= 7) }, { -(it.ratio ?: 0.0) }))

@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.Alignment
@@ -33,10 +36,12 @@ fun planningColor(app: GlanceApp): Color = when (app) {
     GlanceApp.THINGGLANCE -> thingColors().accent
 }
 
-// The pill is one 24 dp cell per app (the tap target, with an 8 dp dot in it) and sits
-// PageIndicatorBottom above the foot of the pager, so its top edge is 32 dp up.
+// The pill is one 24 dp cell per app (the tap target, with an 8 dp dot in it) and one more for
+// the way home, and sits PageIndicatorBottom above the foot of the pager, so its top edge is
+// 32 dp up.
 private val DotCell = 24.dp
 private val Dot = 8.dp
+private val HomeGlyph = 14.dp
 
 /** The gap the root leaves under the pill. */
 val PageIndicatorBottom = 8.dp
@@ -58,12 +63,13 @@ val PageIndicatorToastLift = 32.dp
 /**
  * Which planning page is in front (D80): one dot per app in the app's colour ([planningColor]),
  * in the order the pages sit on screen ([PlanningPages.leftToRight]), the one in front filled
- * and the others outlined. Tapping a dot goes to its page. `LauncherRoot` draws it over the
- * pager, fixed while the pages move under it, and fades it out towards Home, which has no dot:
- * Home is where the pill is not.
+ * and the others outlined. Tapping a dot goes to its page. After the last dot, at the end Home
+ * is on, a house goes back to Home (D82): the one page a swipe may be three pages from.
+ * `LauncherRoot` draws the pill over the pager, fixed while the pages move under it, and fades
+ * it out towards Home, where it is not shown at all.
  */
 @Composable
-fun PageIndicator(apps: List<GlanceApp>, current: GlanceApp?, onPick: (GlanceApp) -> Unit, modifier: Modifier = Modifier) {
+fun PageIndicator(apps: List<GlanceApp>, current: GlanceApp?, onPick: (GlanceApp) -> Unit, onHome: () -> Unit, modifier: Modifier = Modifier) {
     val c = GlanceTheme.colors
     val shape = RoundedCornerShape(50)
     Row(
@@ -83,6 +89,12 @@ fun PageIndicator(apps: List<GlanceApp>, current: GlanceApp?, onPick: (GlanceApp
             ) {
                 Box(Modifier.size(Dot).then(if (front) Modifier.background(color, CircleShape) else Modifier.border(1.5.dp, color, CircleShape)))
             }
+        }
+        Box(
+            Modifier.size(DotCell).clickable(onClickLabel = "Go to Home", role = Role.Button, onClick = onHome).semantics { contentDescription = "Home" },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Filled.Home, contentDescription = null, tint = c.textSecondary, modifier = Modifier.size(HomeGlyph))
         }
     }
 }

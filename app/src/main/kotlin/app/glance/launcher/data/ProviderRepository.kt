@@ -83,6 +83,7 @@ class ProviderRepository(
     private val _inboxCount = MutableStateFlow(fallback.inboxCount.value)
     private val _chores = MutableStateFlow(fallback.chores.value)
     private val _people = MutableStateFlow(fallback.people.value)
+    private val _choreActivity = MutableStateFlow(fallback.choreActivity.value)
     private val _thingGlance = MutableStateFlow<ThingGlanceData?>(null)
     private val _availability = MutableStateFlow(Availability(dayGlanceInstalled = false, lastGlanceInstalled = false))
 
@@ -96,6 +97,7 @@ class ProviderRepository(
     override val inboxCount: StateFlow<Int?> = _inboxCount.asStateFlow()
     override val chores: StateFlow<List<Chore>> = _chores.asStateFlow()
     override val people: StateFlow<List<Person>> = _people.asStateFlow()
+    override val choreActivity: StateFlow<Map<LocalDate, Int>> = _choreActivity.asStateFlow()
     override val thingGlance: StateFlow<ThingGlanceData?> = _thingGlance.asStateFlow()
     override val availability: StateFlow<Availability> = _availability.asStateFlow()
 
@@ -148,7 +150,7 @@ class ProviderRepository(
             recompute()
         }
         // Demo-mode writes go to the fallback, whose flows then move; mirror them.
-        for (flow in listOf(fallback.tasks, fallback.goals, fallback.projects, fallback.routines, fallback.frames, fallback.dayShape, fallback.weather, fallback.chores, fallback.people, fallback.thingGlance)) {
+        for (flow in listOf(fallback.tasks, fallback.goals, fallback.projects, fallback.routines, fallback.frames, fallback.dayShape, fallback.weather, fallback.chores, fallback.people, fallback.choreActivity, fallback.thingGlance)) {
             scope.launch { flow.collect { recompute() } }
         }
         scope.launch { demoOverride.collect { recompute() } }
@@ -216,6 +218,8 @@ class ProviderRepository(
      * by the day), so looking at its page asks again, at most every [PAGE_REFRESH]. The other
      * two are asked often enough already.
      */
+    override fun dayChanged() = recompute()
+
     override suspend fun planningShown(app: GlanceApp) {
         if (app.refreshEvery > PAGE_REFRESH) askIfOlderThan(app, PAGE_REFRESH, clock.instant())
     }
@@ -302,7 +306,11 @@ class ProviderRepository(
         _weather.value = d?.weather ?: fallback.weather.value
         // The live app's own count; the demo has none, so its rows are counted.
         _inboxCount.value = if (d != null) d.meta.inboxCount else null
-        _chores.value = if (l != null) Outbox.applyToChores(l.chores, lastPending) else fallback.chores.value
+        // A chore out of season is listed nowhere, as in the app (D82). lastGLANCE leaves those out
+        // itself; this drops one the day its season ends, before the app has sent a new snapshot.
+        val today = LocalDate.now(clock)
+        _chores.value = (if (l != null) Outbox.applyToChores(l.chores, lastPending) else fallback.chores.value).filter { it.inSeason(today) }
+        _choreActivity.value = if (l != null) Outbox.applyToActivity(l.completionsByDay, lastPending, clock.zone) else fallback.choreActivity.value
         _people.value = if (l != null) Outbox.applyToPeople(l.people, lastPending) else fallback.people.value
         // No demo for a missing thingGLANCE, only for the screenshot demo: without the app there is no page.
         _thingGlance.value = when {

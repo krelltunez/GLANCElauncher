@@ -185,7 +185,9 @@ the search parser).
 a day, greener the more chores were logged, as many of the latest weeks as the width holds.
 Then chores: pinned (D68), due now and due soon (the app's ChoreRow with the cadence fill),
 and every category with all of its chores. Then people, under a People header: Coming up (the
-People home's date tiles), Reach out (D25), and every circle with everyone in it. A category
+People home's date tiles), Reach out (D25), and every circle with everyone in it. A person is
+the app's PersonRow, drawn as a chore is: a stripe in the cadence colour and a bar behind the
+row filled as far as they are through their cadence. A category
 or a circle folds away on a tap and the launcher remembers which are folded; folded, it shows
 a dot when something in it is due. A chore that is out of season is listed nowhere, as in the
 app. The "+" is green and offers a chore (one line) or a person (in lastGLANCE's own form)

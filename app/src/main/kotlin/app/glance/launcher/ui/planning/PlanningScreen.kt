@@ -775,40 +775,56 @@ private fun ChoreRow(chore: Chore, ratio: Double?, now: Instant, controller: Lau
     }
 }
 
+/**
+ * A person as lastGLANCE draws one (`PersonRow.tsx`), and as [ChoreRow] draws a chore: a stripe
+ * down the leading edge in the cadence colour, and behind the row a bar in the same colour
+ * filled as far as the person is through their cadence. The stripe is faint for someone with no
+ * cadence, who has no bar. The initial sits on a plain disc, as in the app: the colour is the
+ * bar's to carry.
+ */
 @Composable
 private fun PersonRow(person: Person, ratio: Double?, now: Instant, controller: LauncherController) {
     val c = GlanceTheme.colors
     val context = LocalContext.current
     val state = Color(Cadence.colorArgb(ratio))
-    Row(
+    val shape = RoundedCornerShape(12.dp)
+    val fill = ((ratio ?: 0.0).coerceIn(0.0, 1.0)).toFloat()
+    val stripe = if (ratio != null) 0.9f else 0.3f
+    Box(
         Modifier
             .fillMaxWidth()
-            .background(c.card, RoundedCornerShape(12.dp))
-            .border(1.dp, c.border, RoundedCornerShape(12.dp))
-            .clickable { GlanceIntents.openPerson(context, person.id) }
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(32.dp).background(state.copy(alpha = 0.2f), CircleShape), contentAlignment = Alignment.Center) {
-            Text(person.name.take(1), color = state, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-        }
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Row {
-                Text(person.name, color = c.text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                if (person.nickname != null) Text("  ${person.nickname}", color = c.textMuted, fontSize = 13.sp)
+            .clip(shape)
+            .background(c.card, shape)
+            .border(1.dp, c.border, shape)
+            .drawBehind {
+                // Fill bar, then the stripe; both span the row's real height and follow the corners.
+                drawRect(state.copy(alpha = 0.1f), size = Size(size.width * fill, size.height))
+                drawRect(state.copy(alpha = stripe), size = Size(4.dp.toPx(), size.height))
             }
-            val elapsed = if (person.lastInteractionAt == null) "no contact logged yet" else "${channelLabel(person.lastChannel)}${Cadence.formatElapsed(person.lastInteractionAt, now)}"
-            Text(elapsed, color = c.textSecondary, fontSize = 12.sp)
-            if (person.unreturned) Text("They reached out last", color = Color(0xFFF59E0B), fontSize = 11.sp)
+            .clickable { GlanceIntents.openPerson(context, person.id) },
+    ) {
+        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 10.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(32.dp).background(c.track, CircleShape), contentAlignment = Alignment.Center) {
+                Text(person.name.take(1).uppercase(), color = c.textSecondary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Row {
+                    Text(person.name, color = c.text, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    if (person.nickname != null) Text("  ${person.nickname}", color = c.textMuted, fontSize = 13.sp, maxLines = 1)
+                }
+                val elapsed = if (person.lastInteractionAt == null) "no contact logged yet" else "${channelLabel(person.lastChannel)}${Cadence.formatElapsed(person.lastInteractionAt, now)}"
+                Text(elapsed, color = c.textSecondary, fontSize = 12.sp)
+                if (person.unreturned) Text("They reached out last", color = Color(0xFFF59E0B), fontSize = 11.sp)
+            }
+            Text(
+                "+ Log", color = c.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .border(1.dp, c.border, RoundedCornerShape(8.dp))
+                    .clickable { controller.logInteraction(person.id, person.name) }
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            )
         }
-        Text(
-            "+ Log", color = c.text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-            modifier = Modifier
-                .border(1.dp, c.border, RoundedCornerShape(8.dp))
-                .clickable { controller.logInteraction(person.id, person.name) }
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-        )
     }
 }
 

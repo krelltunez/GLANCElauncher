@@ -899,6 +899,11 @@ entries by number, so the numbers never change. Files and pull requests named "i
     Goals and Projects, with the arrow back to the top. In tablet landscape people are the
     other column, so there is no chip and no arrow.
 
+    A person's row is the app's bar, as a chore's already was: the stripe and the fill behind
+    the row in the cadence colour, the initial on a plain disc. It had been a white card with
+    only the initial tinted, which read as a different kind of thing from the chore above it
+    and said nothing of how far along anyone was.
+
     A chore out of season is listed nowhere. lastGLANCE hides one from its own lists, but
     sent it to the launcher like any other, with no word of its season, and the launcher
     called a mowing chore "due now" in the middle of November. lastGLANCE now leaves
